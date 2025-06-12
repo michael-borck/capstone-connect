@@ -427,33 +427,144 @@ class CapstoneApp {
             }
             
             modalBody.innerHTML = `
-                <h2>${this.escapeHtml(project.title)}</h2>
-                <div class="project-client" style="margin-bottom: 1rem; color: var(--primary-color); font-weight: bold;">
-                    ${this.escapeHtml(project.organization_name)}
+                <div class="project-detail-modal">
+                    <!-- Header Section -->
+                    <div class="project-detail-header">
+                        <div class="project-detail-title-section">
+                            <h2 class="project-detail-title">${this.escapeHtml(project.title)}</h2>
+                            <div class="project-detail-organization">
+                                <span class="organization-icon">🏢</span>
+                                <span class="organization-name">${this.escapeHtml(project.organization_name)}</span>
+                            </div>
+                        </div>
+                        <div class="project-detail-badges">
+                            <span class="project-status-badge status-${project.status}">${this.formatStatus(project.status)}</span>
+                            ${this.getProjectDetailPopularityBadge(project.interest_count)}
+                        </div>
+                    </div>
+
+                    <!-- Quick Info Grid -->
+                    <div class="project-detail-quick-info">
+                        <div class="quick-info-item">
+                            <span class="quick-info-icon">📅</span>
+                            <div class="quick-info-content">
+                                <span class="quick-info-label">Semester</span>
+                                <span class="quick-info-value">${this.formatSemester(project.semester_availability)}</span>
+                            </div>
+                        </div>
+                        <div class="quick-info-item">
+                            <span class="quick-info-icon">👥</span>
+                            <div class="quick-info-content">
+                                <span class="quick-info-label">Interest Level</span>
+                                <span class="quick-info-value">${project.interest_count} student${project.interest_count !== 1 ? 's' : ''}</span>
+                            </div>
+                        </div>
+                        ${project.duration_weeks ? `
+                        <div class="quick-info-item">
+                            <span class="quick-info-icon">⏱️</span>
+                            <div class="quick-info-content">
+                                <span class="quick-info-label">Duration</span>
+                                <span class="quick-info-value">${project.duration_weeks} weeks</span>
+                            </div>
+                        </div>
+                        ` : ''}
+                        ${project.max_students ? `
+                        <div class="quick-info-item">
+                            <span class="quick-info-icon">👨‍👩‍👧‍👦</span>
+                            <div class="quick-info-content">
+                                <span class="quick-info-label">Team Size</span>
+                                <span class="quick-info-value">Max ${project.max_students} student${project.max_students !== 1 ? 's' : ''}</span>
+                            </div>
+                        </div>
+                        ` : ''}
+                        ${project.project_type ? `
+                        <div class="quick-info-item">
+                            <span class="quick-info-icon">📋</span>
+                            <div class="quick-info-content">
+                                <span class="quick-info-label">Project Type</span>
+                                <span class="quick-info-value">${this.formatProjectType(project.project_type)}</span>
+                            </div>
+                        </div>
+                        ` : ''}
+                    </div>
+
+                    <!-- Description Section -->
+                    <div class="project-detail-section">
+                        <h3 class="section-title">
+                            <span class="section-icon">📝</span>
+                            Project Description
+                        </h3>
+                        <div class="section-content">
+                            <p class="project-description-text">${this.escapeHtml(project.description)}</p>
+                        </div>
+                    </div>
+
+                    <!-- Skills & Technologies Section -->
+                    <div class="project-detail-section">
+                        <h3 class="section-title">
+                            <span class="section-icon">🛠️</span>
+                            Skills & Technologies
+                        </h3>
+                        <div class="section-content">
+                            <div class="skills-technologies-grid">
+                                <div class="skills-column">
+                                    <h4 class="skills-subtitle">Required Skills</h4>
+                                    <div class="skills-tags">
+                                        ${this.formatSkillsTags(project.required_skills)}
+                                    </div>
+                                </div>
+                                <div class="skills-column">
+                                    <h4 class="skills-subtitle">Tools & Technologies</h4>
+                                    <div class="skills-tags">
+                                        ${this.formatSkillsTags(project.tools_technologies)}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Deliverables Section -->
+                    <div class="project-detail-section">
+                        <h3 class="section-title">
+                            <span class="section-icon">🎯</span>
+                            Project Deliverables
+                        </h3>
+                        <div class="section-content">
+                            <p class="deliverables-text">${this.escapeHtml(project.deliverables)}</p>
+                        </div>
+                    </div>
+
+                    ${project.prerequisites ? `
+                    <!-- Prerequisites Section -->
+                    <div class="project-detail-section">
+                        <h3 class="section-title">
+                            <span class="section-icon">📚</span>
+                            Prerequisites & Requirements
+                        </h3>
+                        <div class="section-content">
+                            <p class="prerequisites-text">${this.escapeHtml(project.prerequisites)}</p>
+                        </div>
+                    </div>
+                    ` : ''}
+
+                    ${project.additional_info ? `
+                    <!-- Additional Information Section -->
+                    <div class="project-detail-section">
+                        <h3 class="section-title">
+                            <span class="section-icon">ℹ️</span>
+                            Additional Information
+                        </h3>
+                        <div class="section-content">
+                            <p class="additional-info-text">${this.escapeHtml(project.additional_info)}</p>
+                        </div>
+                    </div>
+                    ` : ''}
+
+                    <!-- Action Buttons -->
+                    <div class="project-detail-actions">
+                        ${actionButtons}
+                    </div>
                 </div>
-                <div style="margin-bottom: 1rem;">
-                    <strong>Status:</strong> <span class="project-status status-${project.status}">${this.formatStatus(project.status)}</span>
-                </div>
-                <div style="margin-bottom: 1rem;">
-                    <strong>Semester:</strong> ${this.formatSemester(project.semester_availability)}
-                </div>
-                <div style="margin-bottom: 1rem;">
-                    <strong>Interest Level:</strong> ${project.interest_count} students interested
-                </div>
-                <div style="margin-bottom: 1rem;">
-                    <strong>Required Skills:</strong> ${this.escapeHtml(project.required_skills)}
-                </div>
-                <div style="margin-bottom: 1rem;">
-                    <strong>Tools & Technologies:</strong> ${this.escapeHtml(project.tools_technologies)}
-                </div>
-                <div style="margin-bottom: 1rem;">
-                    <strong>Deliverables:</strong> ${this.escapeHtml(project.deliverables)}
-                </div>
-                <div style="margin-bottom: 2rem;">
-                    <strong>Description:</strong>
-                    <p style="margin-top: 0.5rem; line-height: 1.6;">${this.escapeHtml(project.description)}</p>
-                </div>
-                ${actionButtons}
             `;
 
             this.showModal();
@@ -1594,6 +1705,33 @@ class CapstoneApp {
             case 'rejected': return 'Rejected';
             default: return status;
         }
+    }
+
+    formatProjectType(type) {
+        switch(type) {
+            case 'software': return 'Software Development';
+            case 'research': return 'Research Project';
+            case 'design': return 'Design & UX';
+            case 'data': return 'Data Analysis';
+            case 'hardware': return 'Hardware/IoT';
+            case 'business': return 'Business Analysis';
+            case 'other': return 'Other';
+            default: return type;
+        }
+    }
+
+    getProjectDetailPopularityBadge(interestCount) {
+        const popularity = this.getPopularityLevel(interestCount);
+        return `<span class="popularity-badge ${popularity.className}">${popularity.icon} ${popularity.text}</span>`;
+    }
+
+    formatSkillsTags(skillsString) {
+        if (!skillsString) return '<span class="no-skills">Not specified</span>';
+        
+        // Split by common delimiters and create tags
+        const skills = skillsString.split(/[,;|]/).map(skill => skill.trim()).filter(skill => skill);
+        
+        return skills.map(skill => `<span class="skill-tag">${this.escapeHtml(skill)}</span>`).join('');
     }
 
     escapeHtml(text) {
