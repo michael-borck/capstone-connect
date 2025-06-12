@@ -7,7 +7,7 @@ const { validationRules } = require('../middleware/validation');
 const { logger } = require('../utils/logger');
 
 // Get system health and statistics
-router.get('/health', authenticate, authorize(['admin']), async (req, res) => {
+router.get('/health', authenticate, authorize('admin'), async (req, res) => {
     try {
         const healthData = {
             timestamp: new Date().toISOString(),
@@ -58,7 +58,7 @@ router.get('/health', authenticate, authorize(['admin']), async (req, res) => {
 });
 
 // Get recent error logs
-router.get('/logs/errors', authenticate, authorize(['admin']), validationRules.search, async (req, res) => {
+router.get('/logs/errors', authenticate, authorize('admin'), validationRules.search, async (req, res) => {
     try {
         const { limit = 50, offset = 0, level } = req.query;
         
@@ -118,7 +118,7 @@ router.get('/logs/errors', authenticate, authorize(['admin']), validationRules.s
 });
 
 // Get log statistics
-router.get('/logs/stats', authenticate, authorize(['admin']), async (req, res) => {
+router.get('/logs/stats', authenticate, authorize('admin'), async (req, res) => {
     try {
         const { days = 7 } = req.query;
         const cutoffDate = new Date();
@@ -191,7 +191,7 @@ router.get('/logs/stats', authenticate, authorize(['admin']), async (req, res) =
 });
 
 // Clear old logs (admin maintenance)
-router.delete('/logs/cleanup', authenticate, authorize(['admin']), async (req, res) => {
+router.delete('/logs/cleanup', authenticate, authorize('admin'), async (req, res) => {
     try {
         const { days = 90 } = req.body;
         const cutoffDate = new Date();
@@ -232,7 +232,7 @@ router.delete('/logs/cleanup', authenticate, authorize(['admin']), async (req, r
 });
 
 // Get audit logs
-router.get('/audit', authenticate, authorize(['admin']), validationRules.search, async (req, res) => {
+router.get('/audit', authenticate, authorize('admin'), validationRules.search, async (req, res) => {
     try {
         const { limit = 50, offset = 0, action, userType } = req.query;
         
@@ -297,7 +297,7 @@ router.get('/audit', authenticate, authorize(['admin']), validationRules.search,
 });
 
 // Get pending projects for approval
-router.get('/projects/pending', authenticate, authorize(['admin']), async (req, res) => {
+router.get('/projects/pending', authenticate, authorize('admin'), async (req, res) => {
     try {
         const projects = await database.query(`
             SELECT 
@@ -332,7 +332,7 @@ router.get('/projects/pending', authenticate, authorize(['admin']), async (req, 
 });
 
 // Export error logs as CSV
-router.get('/logs/export', authenticate, authorize(['admin']), async (req, res) => {
+router.get('/logs/export', authenticate, authorize('admin'), async (req, res) => {
     try {
         const { days = 30, level } = req.query;
         const cutoffDate = new Date();
@@ -385,6 +385,380 @@ router.get('/logs/export', authenticate, authorize(['admin']), async (req, res) 
             success: false,
             error: 'Failed to export error logs',
             code: 'LOG_EXPORT_ERROR'
+        });
+    }
+});
+
+// Get system statistics for admin dashboard
+router.get('/statistics', authenticate, authorize('admin'), async (req, res) => {
+    try {
+        // Get comprehensive system statistics
+        const [
+            projectsStats,
+            usersStats,
+            interestsStats,
+            organizationsStats,
+            monthlyProjectsStats,
+            monthlyUsersStats
+        ] = await Promise.all([
+            // Projects statistics
+            database.query(`
+                SELECT 
+                    COUNT(*) as total_projects,
+                    COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_projects,
+                    COUNT(CASE WHEN status = 'approved' THEN 1 END) as active_projects,
+                    COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_projects
+                FROM projects
+            `),
+            
+            // Users statistics
+            database.query(`
+                SELECT 
+                    COUNT(*) as total_users,
+                    COUNT(CASE WHEN type = 'student' THEN 1 END) as total_students,
+                    COUNT(CASE WHEN type = 'client' THEN 1 END) as total_clients,
+                    COUNT(CASE WHEN type = 'admin' THEN 1 END) as total_admins
+                FROM (
+                    SELECT 'student' as type FROM students
+                    UNION ALL
+                    SELECT 'client' as type FROM clients
+                    UNION ALL
+                    SELECT 'admin' as type FROM admin_users
+                ) as all_users
+            `),
+            
+            // Interest statistics
+            database.query(`
+                SELECT 
+                    COUNT(*) as total_interests,
+                    COUNT(DISTINCT student_id) as students_with_interests,
+                    ROUND(CAST(COUNT(*) AS FLOAT) / NULLIF(COUNT(DISTINCT project_id), 0), 2) as avg_interest_per_project
+                FROM student_interests 
+                WHERE is_active = 1
+            `),
+            
+            // Organizations statistics
+            database.query(`
+                SELECT 
+                    COUNT(DISTINCT organization_name) as total_organizations,
+                    COUNT(CASE WHEN created_at > datetime('now', '-30 days') THEN 1 END) as new_organizations
+                FROM clients
+                WHERE organization_name IS NOT NULL
+            `),
+            
+            // Monthly projects trend
+            database.query(`
+                SELECT COUNT(*) as projects_this_month
+                FROM projects 
+                WHERE created_at > datetime('now', '-30 days')
+            `),
+            
+            // Monthly users trend
+            database.query(`
+                SELECT COUNT(*) as users_this_month
+                FROM (
+                    SELECT created_at FROM students WHERE created_at > datetime('now', '-30 days')
+                    UNION ALL
+                    SELECT created_at FROM clients WHERE created_at > datetime('now', '-30 days')
+                ) as new_users
+            `)
+        ]);
+
+        // Calculate engagement rate
+        const totalStudents = usersStats[0].total_students || 1;
+        const studentsWithInterests = interestsStats[0].students_with_interests || 0;
+        const engagementRate = Math.round((studentsWithInterests / totalStudents) * 100);
+
+        const statistics = {
+            total_projects: projectsStats[0].total_projects || 0,
+            pending_projects: projectsStats[0].pending_projects || 0,
+            active_projects: projectsStats[0].active_projects || 0,
+            completed_projects: projectsStats[0].completed_projects || 0,
+            total_users: usersStats[0].total_users || 0,
+            total_students: usersStats[0].total_students || 0,
+            total_clients: usersStats[0].total_clients || 0,
+            total_admins: usersStats[0].total_admins || 0,
+            total_interests: interestsStats[0].total_interests || 0,
+            avg_interest_per_project: Math.round(interestsStats[0].avg_interest_per_project || 0),
+            engagement_rate: engagementRate,
+            total_organizations: organizationsStats[0].total_organizations || 0,
+            new_organizations: organizationsStats[0].new_organizations || 0,
+            projects_this_month: monthlyProjectsStats[0].projects_this_month || 0,
+            users_this_month: monthlyUsersStats[0].users_this_month || 0
+        };
+
+        await logger.logUserAction('viewed_admin_statistics', req.user, {
+            requestId: req.id
+        });
+
+        res.json({
+            success: true,
+            ...statistics
+        });
+
+    } catch (error) {
+        await req.logError(error, { action: 'get_admin_statistics' });
+        res.status(500).json({
+            success: false,
+            error: 'Failed to retrieve system statistics',
+            code: 'ADMIN_STATS_ERROR'
+        });
+    }
+});
+
+// Get all projects for admin management
+router.get('/projects/all', authenticate, authorize('admin'), async (req, res) => {
+    try {
+        const projects = await database.query(`
+            SELECT 
+                p.*,
+                c.organization_name,
+                c.contact_name,
+                c.email as client_email,
+                COUNT(DISTINCT si.student_id) as interest_count,
+                COUNT(DISTINCT sf.student_id) as favorites_count
+            FROM projects p
+            JOIN clients c ON p.client_id = c.id
+            LEFT JOIN student_interests si ON p.id = si.project_id AND si.is_active = 1
+            LEFT JOIN student_favorites sf ON p.id = sf.project_id
+            GROUP BY p.id
+            ORDER BY p.created_at DESC
+        `);
+
+        await logger.logUserAction('viewed_all_projects', req.user, {
+            requestId: req.id,
+            projectCount: projects.length
+        });
+
+        res.json({
+            success: true,
+            projects
+        });
+
+    } catch (error) {
+        await req.logError(error, { action: 'get_all_projects' });
+        res.status(500).json({
+            success: false,
+            error: 'Failed to retrieve all projects',
+            code: 'ALL_PROJECTS_ERROR'
+        });
+    }
+});
+
+// Get all users for admin management
+router.get('/users', authenticate, authorize('admin'), async (req, res) => {
+    try {
+        // Get all users from different tables
+        const [students, clients, admins] = await Promise.all([
+            database.query(`
+                SELECT 
+                    s.id,
+                    s.full_name,
+                    s.email,
+                    s.created_at,
+                    'student' as type,
+                    NULL as organization_name,
+                    COUNT(DISTINCT si.project_id) as interests_count,
+                    COUNT(DISTINCT sf.project_id) as favorites_count
+                FROM students s
+                LEFT JOIN student_interests si ON s.id = si.student_id AND si.is_active = 1
+                LEFT JOIN student_favorites sf ON s.id = sf.student_id
+                GROUP BY s.id
+            `),
+            
+            database.query(`
+                SELECT 
+                    c.id,
+                    c.contact_name as full_name,
+                    c.email,
+                    c.created_at,
+                    'client' as type,
+                    c.organization_name,
+                    COUNT(DISTINCT p.id) as projects_count,
+                    0 as interests_count,
+                    0 as favorites_count
+                FROM clients c
+                LEFT JOIN projects p ON c.id = p.client_id
+                GROUP BY c.id
+            `),
+            
+            database.query(`
+                SELECT 
+                    a.id,
+                    a.full_name,
+                    a.email,
+                    a.created_at,
+                    'admin' as type,
+                    NULL as organization_name,
+                    0 as projects_count,
+                    0 as interests_count,
+                    0 as favorites_count
+                FROM admin_users a
+            `)
+        ]);
+
+        // Combine all users
+        const allUsers = [
+            ...students.map(s => ({
+                ...s,
+                projects_count: 0
+            })),
+            ...clients.map(c => ({
+                ...c,
+                favorites_count: 0
+            })),
+            ...admins
+        ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+        await logger.logUserAction('viewed_user_management', req.user, {
+            requestId: req.id,
+            userCount: allUsers.length
+        });
+
+        res.json({
+            success: true,
+            users: allUsers
+        });
+
+    } catch (error) {
+        await req.logError(error, { action: 'get_all_users' });
+        res.status(500).json({
+            success: false,
+            error: 'Failed to retrieve users',
+            code: 'ALL_USERS_ERROR'
+        });
+    }
+});
+
+// Bulk approve projects
+router.post('/projects/bulk-approve', authenticate, authorize('admin'), async (req, res) => {
+    try {
+        const { projectIds } = req.body;
+        
+        if (!Array.isArray(projectIds) || projectIds.length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Project IDs array is required',
+                code: 'INVALID_PROJECT_IDS'
+            });
+        }
+
+        // Validate all project IDs exist and are pending
+        const placeholders = projectIds.map(() => '?').join(',');
+        const projects = await database.query(
+            `SELECT id, title, status FROM projects WHERE id IN (${placeholders})`,
+            projectIds
+        );
+
+        if (projects.length !== projectIds.length) {
+            return res.status(400).json({
+                success: false,
+                error: 'Some project IDs are invalid',
+                code: 'INVALID_PROJECT_IDS'
+            });
+        }
+
+        const nonPendingProjects = projects.filter(p => p.status !== 'pending');
+        if (nonPendingProjects.length > 0) {
+            return res.status(400).json({
+                success: false,
+                error: `Some projects are not in pending status: ${nonPendingProjects.map(p => p.title).join(', ')}`,
+                code: 'INVALID_PROJECT_STATUS'
+            });
+        }
+
+        // Update all projects to approved status
+        const updateQuery = `UPDATE projects SET status = 'approved', updated_at = datetime('now') WHERE id IN (${placeholders})`;
+        const result = await database.run(updateQuery, projectIds);
+
+        await logger.logUserAction('bulk_approved_projects', req.user, {
+            requestId: req.id,
+            projectIds,
+            approvedCount: result.changes
+        });
+
+        res.json({
+            success: true,
+            message: `Successfully approved ${result.changes} projects`,
+            approved: result.changes
+        });
+
+    } catch (error) {
+        await req.logError(error, { action: 'bulk_approve_projects' });
+        res.status(500).json({
+            success: false,
+            error: 'Failed to bulk approve projects',
+            code: 'BULK_APPROVE_ERROR'
+        });
+    }
+});
+
+// Bulk reject projects
+router.post('/projects/bulk-reject', authenticate, authorize('admin'), async (req, res) => {
+    try {
+        const { projectIds, feedback } = req.body;
+        
+        if (!Array.isArray(projectIds) || projectIds.length === 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Project IDs array is required',
+                code: 'INVALID_PROJECT_IDS'
+            });
+        }
+
+        // Validate all project IDs exist and are pending
+        const placeholders = projectIds.map(() => '?').join(',');
+        const projects = await database.query(
+            `SELECT id, title, status FROM projects WHERE id IN (${placeholders})`,
+            projectIds
+        );
+
+        if (projects.length !== projectIds.length) {
+            return res.status(400).json({
+                success: false,
+                error: 'Some project IDs are invalid',
+                code: 'INVALID_PROJECT_IDS'
+            });
+        }
+
+        const nonPendingProjects = projects.filter(p => p.status !== 'pending');
+        if (nonPendingProjects.length > 0) {
+            return res.status(400).json({
+                success: false,
+                error: `Some projects are not in pending status: ${nonPendingProjects.map(p => p.title).join(', ')}`,
+                code: 'INVALID_PROJECT_STATUS'
+            });
+        }
+
+        // Update all projects to rejected status with feedback
+        const updateQuery = `
+            UPDATE projects 
+            SET status = 'rejected', 
+                admin_feedback = ?, 
+                updated_at = datetime('now') 
+            WHERE id IN (${placeholders})
+        `;
+        const result = await database.run(updateQuery, [feedback || null, ...projectIds]);
+
+        await logger.logUserAction('bulk_rejected_projects', req.user, {
+            requestId: req.id,
+            projectIds,
+            rejectedCount: result.changes,
+            feedback: feedback || null
+        });
+
+        res.json({
+            success: true,
+            message: `Successfully rejected ${result.changes} projects`,
+            rejected: result.changes
+        });
+
+    } catch (error) {
+        await req.logError(error, { action: 'bulk_reject_projects' });
+        res.status(500).json({
+            success: false,
+            error: 'Failed to bulk reject projects',
+            code: 'BULK_REJECT_ERROR'
         });
     }
 });

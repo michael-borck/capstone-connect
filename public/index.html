@@ -156,7 +156,15 @@
                             <div id="interestsTab" class="tab-panel active">
                                 <div class="interests-header">
                                     <h3>My Project Interests</h3>
-                                    <span class="interest-count-badge" id="interestCountBadge">0/5 interests</span>
+                                    <div class="interests-header-actions">
+                                        <span class="interest-count-badge" id="interestCountBadge">0/5 interests</span>
+                                        <button class="btn btn-outline btn-sm" id="selectAllInterests" style="display: none; margin-left: 1rem;">
+                                            Select All
+                                        </button>
+                                        <button class="btn btn-danger btn-sm" id="bulkWithdrawBtn" style="display: none; margin-left: 0.5rem;">
+                                            Withdraw Selected
+                                        </button>
+                                    </div>
                                 </div>
                                 <div id="interestsList" class="dashboard-list">
                                     <div class="loading">Loading interests...</div>
@@ -193,31 +201,133 @@
                 <div class="container">
                     <h2 class="section-title">Admin Dashboard</h2>
                     <div class="admin-container">
+                        <!-- Admin Navigation Tabs -->
                         <div class="admin-tabs">
                             <button class="admin-tab active" data-tab="pending">Pending Projects</button>
                             <button class="admin-tab" data-tab="stats">Statistics</button>
                             <button class="admin-tab" data-tab="all">All Projects</button>
+                            <button class="admin-tab" data-tab="users">User Management</button>
                         </div>
                         
                         <div class="admin-content">
+                            <!-- Pending Projects Tab -->
                             <div id="pendingProjects" class="admin-panel active">
-                                <h3>Projects Awaiting Approval</h3>
+                                <div class="admin-panel-header">
+                                    <h3>Projects Awaiting Approval</h3>
+                                    <div class="admin-filters">
+                                        <div class="admin-filter-group">
+                                            <label class="admin-filter-label">Search:</label>
+                                            <input type="text" id="pendingProjectsSearch" class="admin-search" placeholder="Search by title, organization, or description...">
+                                        </div>
+                                        <div class="admin-filter-group">
+                                            <label class="admin-filter-label">Sort by:</label>
+                                            <select id="pendingProjectsSort" class="admin-select">
+                                                <option value="newest">Newest First</option>
+                                                <option value="oldest">Oldest First</option>
+                                                <option value="organization">Organization A-Z</option>
+                                                <option value="title">Title A-Z</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Bulk Actions for Pending Projects -->
+                                <div id="pendingBulkActions" class="admin-bulk-actions" style="display: none;">
+                                    <span class="bulk-selected-count" id="pendingSelectedCount">0 projects selected</span>
+                                    <button class="btn btn-primary btn-sm" onclick="window.capstoneApp.bulkApproveProjects()">
+                                        Bulk Approve
+                                    </button>
+                                    <button class="btn btn-secondary btn-sm" onclick="window.capstoneApp.bulkRejectProjects()">
+                                        Bulk Reject
+                                    </button>
+                                    <button class="btn btn-outline btn-sm" onclick="window.capstoneApp.clearPendingSelection()">
+                                        Clear Selection
+                                    </button>
+                                </div>
+                                
                                 <div id="pendingProjectsList" class="projects-grid">
                                     <div class="loading">Loading pending projects...</div>
                                 </div>
                             </div>
 
+                            <!-- Statistics Tab -->
                             <div id="statsPanel" class="admin-panel">
-                                <h3>System Statistics</h3>
-                                <div id="adminStats" class="stats-grid">
+                                <h3>System Statistics & Analytics</h3>
+                                
+                                <!-- Key Metrics -->
+                                <div id="adminStats" class="admin-stats-grid">
                                     <div class="loading">Loading statistics...</div>
+                                </div>
+                                
+                                <!-- Charts and Detailed Analytics -->
+                                <div class="admin-analytics-section">
+                                    <h4>Project Activity Over Time</h4>
+                                    <div id="adminCharts" class="admin-charts">
+                                        <div class="loading">Loading analytics...</div>
+                                    </div>
                                 </div>
                             </div>
 
+                            <!-- All Projects Tab -->
                             <div id="allProjectsPanel" class="admin-panel">
-                                <h3>All Projects</h3>
+                                <div class="admin-panel-header">
+                                    <h3>All Projects</h3>
+                                    <div class="admin-filters">
+                                        <div class="admin-filter-group">
+                                            <label class="admin-filter-label">Search:</label>
+                                            <input type="text" id="allProjectsSearch" class="admin-search" placeholder="Search all projects...">
+                                        </div>
+                                        <div class="admin-filter-group">
+                                            <label class="admin-filter-label">Status:</label>
+                                            <select id="allProjectsStatus" class="admin-select">
+                                                <option value="">All Statuses</option>
+                                                <option value="pending">Pending</option>
+                                                <option value="approved">Approved</option>
+                                                <option value="active">Active</option>
+                                                <option value="rejected">Rejected</option>
+                                                <option value="completed">Completed</option>
+                                            </select>
+                                        </div>
+                                        <div class="admin-filter-group">
+                                            <label class="admin-filter-label">Sort by:</label>
+                                            <select id="allProjectsSort" class="admin-select">
+                                                <option value="newest">Newest First</option>
+                                                <option value="oldest">Oldest First</option>
+                                                <option value="status">Status</option>
+                                                <option value="interest">Most Interest</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                
                                 <div id="allProjectsList" class="projects-grid">
                                     <div class="loading">Loading all projects...</div>
+                                </div>
+                            </div>
+                            
+                            <!-- User Management Tab -->
+                            <div id="usersPanel" class="admin-panel">
+                                <div class="admin-panel-header">
+                                    <h3>User Management</h3>
+                                    <div class="admin-filters">
+                                        <div class="admin-filter-group">
+                                            <label class="admin-filter-label">Search:</label>
+                                            <input type="text" id="usersSearch" class="admin-search" placeholder="Search users by name or email...">
+                                        </div>
+                                        <div class="admin-filter-group">
+                                            <label class="admin-filter-label">User Type:</label>
+                                            <select id="usersType" class="admin-select">
+                                                <option value="">All Users</option>
+                                                <option value="student">Students</option>
+                                                <option value="client">Clients</option>
+                                                <option value="admin">Admins</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div id="usersList" class="admin-users-grid">
+                                    <div class="loading">Loading users...</div>
                                 </div>
                             </div>
                         </div>
@@ -317,6 +427,9 @@
     <div id="loadingOverlay" class="loading-overlay">
         <div class="loading-spinner"></div>
     </div>
+
+    <!-- Toast notifications container -->
+    <div id="toastContainer" class="toast-container"></div>
 
     <!-- Modal for project details, registration forms, etc. -->
     <div id="modal" class="modal">

@@ -655,33 +655,65 @@ class CapstoneApp {
             const data = await response.json();
 
             if (response.ok) {
-                console.log('Interest expressed successfully!');
+                // Find the project for better notification
+                const project = this.projects.find(p => p.id === projectId) || { title: 'the project' };
+                
+                this.showSuccessToast(
+                    'Interest Expressed',
+                    `Your interest in "${project.title}" has been recorded. The project client will be notified.`
+                );
+                
                 this.closeModal();
                 // Refresh project data
                 await this.loadProjects();
             } else {
+                let errorMessage = 'Failed to express interest in this project.';
+                
                 if (data.code === 'INTEREST_LIMIT_EXCEEDED') {
-                    console.log(`You have reached the maximum limit of ${data.maxAllowed} project interests. You currently have ${data.currentCount} active interests.`);
-                } else {
-                    console.log(data.error || 'Failed to express interest');
+                    errorMessage = `You have reached the maximum limit of ${data.maxAllowed} project interests. You currently have ${data.currentCount} active interests.`;
+                } else if (data.code === 'INTEREST_ALREADY_EXISTS') {
+                    errorMessage = 'You have already expressed interest in this project.';
+                } else if (data.code === 'PROJECT_NOT_AVAILABLE') {
+                    errorMessage = 'This project is not currently available for interest expression.';
+                } else if (data.error) {
+                    errorMessage = data.error;
                 }
+                
+                this.showErrorToast('Interest Expression Failed', errorMessage);
             }
 
         } catch (error) {
             console.error('Error expressing interest:', error);
-            console.log('Network error. Please try again.');
+            this.showErrorToast(
+                'Network Error',
+                'Unable to connect to the server. Please try again.'
+            );
         }
     }
 
-    async withdrawInterest(projectId) {
+    async withdrawInterest(projectId, buttonElement = null) {
         if (!this.currentUser || this.currentUser.type !== 'student') {
             return;
         }
 
         try {
-            // Confirm withdrawal
-            if (!confirm('Are you sure you want to withdraw your interest in this project?')) {
+            // Find the project for better confirmation message
+            const project = this.projects.find(p => p.id === projectId) || 
+                           { title: 'this project', organization_name: 'Unknown' };
+
+            // Enhanced confirmation dialog
+            const confirmMessage = `Are you sure you want to withdraw your interest in "${project.title}"?\n\nThis action will:\n• Remove you from the interested students list\n• Free up one of your 5 interest slots\n• Notify the project client of your withdrawal\n\nThis action cannot be undone.`;
+            
+            if (!confirm(confirmMessage)) {
                 return;
+            }
+
+            // Add loading state to button if provided
+            if (buttonElement) {
+                buttonElement.disabled = true;
+                buttonElement.classList.add('btn-loading');
+                buttonElement.setAttribute('data-original-text', buttonElement.textContent);
+                buttonElement.textContent = 'Withdrawing...';
             }
 
             const response = await fetch(`/api/students/interests/${projectId}`, {
@@ -695,21 +727,49 @@ class CapstoneApp {
             const data = await response.json();
 
             if (response.ok) {
-                console.log('Interest withdrawn successfully!');
+                this.showSuccessToast(
+                    'Interest Withdrawn',
+                    `You have successfully withdrawn your interest in "${project.title}". You now have one more interest slot available.`
+                );
+                
                 this.closeModal();
+                
                 // Refresh project data
                 await this.loadProjects();
+                
                 // If we're on the student dashboard, refresh it too
                 if (this.currentSection === 'studentDashboard') {
                     await this.loadStudentDashboard();
                 }
             } else {
-                console.log(data.error || 'Failed to withdraw interest');
+                // Handle specific error cases
+                let errorMessage = 'An unexpected error occurred. Please try again.';
+                
+                if (data.code === 'INTEREST_NOT_FOUND') {
+                    errorMessage = 'You have not expressed interest in this project, or it has already been withdrawn.';
+                } else if (data.code === 'PROJECT_NOT_FOUND') {
+                    errorMessage = 'This project no longer exists or is not available.';
+                } else if (data.error) {
+                    errorMessage = data.error;
+                }
+                
+                this.showErrorToast('Withdrawal Failed', errorMessage);
             }
 
         } catch (error) {
             console.error('Error withdrawing interest:', error);
-            console.log('Network error. Please try again.');
+            this.showErrorToast(
+                'Network Error',
+                'Unable to connect to the server. Please check your connection and try again.'
+            );
+        } finally {
+            // Reset button state
+            if (buttonElement) {
+                buttonElement.disabled = false;
+                buttonElement.classList.remove('btn-loading');
+                buttonElement.textContent = buttonElement.getAttribute('data-original-text') || 'Withdraw Interest';
+                buttonElement.removeAttribute('data-original-text');
+            }
         }
     }
 
@@ -742,9 +802,15 @@ class CapstoneApp {
             const data = await response.json();
 
             if (response.ok) {
-                console.log('Project added to favorites!');
-                // Update the project in our local data
                 const project = this.projects.find(p => p.id === projectId);
+                const projectTitle = project ? project.title : 'Project';
+                
+                this.showSuccessToast(
+                    'Added to Favorites',
+                    `"${projectTitle}" has been added to your favorites.`
+                );
+                
+                // Update the project in our local data
                 if (project) {
                     project.isFavorite = true;
                     this.renderProjects(this.projects);
@@ -754,12 +820,24 @@ class CapstoneApp {
                     await this.showProjectDetails(projectId);
                 }
             } else {
-                console.log(data.error || 'Failed to add to favorites');
+                let errorMessage = 'Failed to add project to favorites.';
+                if (data.code === 'ALREADY_FAVORITED') {
+                    errorMessage = 'This project is already in your favorites.';
+                } else if (data.code === 'FAVORITES_LIMIT_EXCEEDED') {
+                    errorMessage = `You have reached the maximum limit of ${data.maxAllowed} favorites.`;
+                } else if (data.error) {
+                    errorMessage = data.error;
+                }
+                
+                this.showErrorToast('Favorites Error', errorMessage);
             }
 
         } catch (error) {
             console.error('Error adding to favorites:', error);
-            console.log('Network error. Please try again.');
+            this.showErrorToast(
+                'Network Error',
+                'Unable to connect to the server. Please try again.'
+            );
         }
     }
 
@@ -780,9 +858,15 @@ class CapstoneApp {
             const data = await response.json();
 
             if (response.ok) {
-                console.log('Project removed from favorites!');
-                // Update the project in our local data
                 const project = this.projects.find(p => p.id === projectId);
+                const projectTitle = project ? project.title : 'Project';
+                
+                this.showSuccessToast(
+                    'Removed from Favorites',
+                    `"${projectTitle}" has been removed from your favorites.`
+                );
+                
+                // Update the project in our local data
                 if (project) {
                     project.isFavorite = false;
                     this.renderProjects(this.projects);
@@ -796,12 +880,22 @@ class CapstoneApp {
                     await this.loadStudentDashboard();
                 }
             } else {
-                console.log(data.error || 'Failed to remove from favorites');
+                let errorMessage = 'Failed to remove project from favorites.';
+                if (data.code === 'NOT_FAVORITED') {
+                    errorMessage = 'This project is not in your favorites.';
+                } else if (data.error) {
+                    errorMessage = data.error;
+                }
+                
+                this.showErrorToast('Favorites Error', errorMessage);
             }
 
         } catch (error) {
             console.error('Error removing from favorites:', error);
-            console.log('Network error. Please try again.');
+            this.showErrorToast(
+                'Network Error',
+                'Unable to connect to the server. Please try again.'
+            );
         }
     }
 
@@ -1365,12 +1459,144 @@ class CapstoneApp {
 
     async showAdminDashboard() {
         if (!this.currentUser || this.currentUser.type !== 'admin') {
-            console.log('Admin access required');
+            this.showErrorToast('Access Denied', 'Admin access required');
             return;
         }
 
         this.showSection('admin');
+        this.setupAdminTabs();
         await this.loadPendingProjects();
+    }
+
+    setupAdminTabs() {
+        // Admin tab switching
+        document.querySelectorAll('.admin-tab').forEach(tab => {
+            tab.addEventListener('click', (e) => {
+                const tabType = e.target.getAttribute('data-tab');
+                this.showAdminTab(tabType);
+            });
+        });
+
+        // Admin search and filter setup
+        this.setupAdminFilters();
+        this.setupAdminBulkActions();
+    }
+
+    showAdminTab(tabType) {
+        // Update tab buttons
+        document.querySelectorAll('.admin-tab').forEach(tab => {
+            tab.classList.remove('active');
+            if (tab.getAttribute('data-tab') === tabType) {
+                tab.classList.add('active');
+            }
+        });
+
+        // Update panels
+        document.querySelectorAll('.admin-panel').forEach(panel => {
+            panel.classList.remove('active');
+        });
+
+        // Map tab types to their actual panel IDs
+        const panelMap = {
+            'pending': 'pendingProjects',
+            'stats': 'statsPanel',
+            'all': 'allProjectsPanel',
+            'users': 'usersPanel'
+        };
+        
+        const panelId = panelMap[tabType] || `${tabType}Panel`;
+        const targetPanel = document.getElementById(panelId);
+        if (targetPanel) {
+            targetPanel.classList.add('active');
+        }
+
+        // Load data for specific tabs
+        switch (tabType) {
+            case 'pending':
+                this.loadPendingProjects();
+                break;
+            case 'stats':
+                this.loadAdminStatistics();
+                break;
+            case 'all':
+                this.loadAllProjects();
+                break;
+            case 'users':
+                this.loadUserManagement();
+                break;
+        }
+    }
+
+    setupAdminFilters() {
+        // Pending projects search
+        const pendingSearch = document.getElementById('pendingProjectsSearch');
+        const pendingSort = document.getElementById('pendingProjectsSort');
+        
+        if (pendingSearch) {
+            pendingSearch.addEventListener('input', () => this.filterPendingProjects());
+        }
+        
+        if (pendingSort) {
+            pendingSort.addEventListener('change', () => this.filterPendingProjects());
+        }
+
+        // All projects search and filters
+        const allProjectsSearch = document.getElementById('allProjectsSearch');
+        const allProjectsStatus = document.getElementById('allProjectsStatus');
+        const allProjectsSort = document.getElementById('allProjectsSort');
+        
+        if (allProjectsSearch) {
+            allProjectsSearch.addEventListener('input', () => this.filterAllProjects());
+        }
+        
+        if (allProjectsStatus) {
+            allProjectsStatus.addEventListener('change', () => this.filterAllProjects());
+        }
+        
+        if (allProjectsSort) {
+            allProjectsSort.addEventListener('change', () => this.filterAllProjects());
+        }
+
+        // Users search and filter
+        const usersSearch = document.getElementById('usersSearch');
+        const usersType = document.getElementById('usersType');
+        
+        if (usersSearch) {
+            usersSearch.addEventListener('input', () => this.filterUsers());
+        }
+        
+        if (usersType) {
+            usersType.addEventListener('change', () => this.filterUsers());
+        }
+    }
+
+    setupAdminBulkActions() {
+        // Bulk selection for pending projects
+        this.selectedPendingProjects = new Set();
+        
+        document.addEventListener('change', (e) => {
+            if (e.target.matches('.pending-project-checkbox')) {
+                const projectId = parseInt(e.target.dataset.projectId);
+                if (e.target.checked) {
+                    this.selectedPendingProjects.add(projectId);
+                } else {
+                    this.selectedPendingProjects.delete(projectId);
+                }
+                this.updatePendingBulkActions();
+            }
+        });
+    }
+
+    updatePendingBulkActions() {
+        const bulkActions = document.getElementById('pendingBulkActions');
+        const selectedCount = document.getElementById('pendingSelectedCount');
+        
+        if (this.selectedPendingProjects.size > 0) {
+            bulkActions.style.display = 'flex';
+            selectedCount.textContent = `${this.selectedPendingProjects.size} projects selected`;
+        } else {
+            bulkActions.style.display = 'none';
+        }
     }
 
     async showClientDashboard() {
@@ -1628,6 +1854,8 @@ class CapstoneApp {
 
     renderInterestsList(interests) {
         const container = document.getElementById('interestsList');
+        const selectAllBtn = document.getElementById('selectAllInterests');
+        const bulkWithdrawBtn = document.getElementById('bulkWithdrawBtn');
         
         if (!interests || interests.length === 0) {
             container.innerHTML = `
@@ -1639,11 +1867,21 @@ class CapstoneApp {
                     </button>
                 </div>
             `;
+            // Hide bulk action buttons
+            if (selectAllBtn) selectAllBtn.style.display = 'none';
+            if (bulkWithdrawBtn) bulkWithdrawBtn.style.display = 'none';
             return;
         }
 
+        // Show bulk action buttons
+        if (selectAllBtn) selectAllBtn.style.display = 'inline-block';
+        if (bulkWithdrawBtn) bulkWithdrawBtn.style.display = 'inline-block';
+
         container.innerHTML = interests.map(interest => `
-            <div class="dashboard-item" onclick="window.capstoneApp.showProjectDetails(${interest.project_id})">
+            <div class="dashboard-item selectable" data-project-id="${interest.project_id}" onclick="window.capstoneApp.showProjectDetails(${interest.project_id})">
+                <div class="dashboard-item-checkbox">
+                    <input type="checkbox" onclick="event.stopPropagation(); window.capstoneApp.toggleInterestSelection(${interest.project_id}); window.capstoneApp.updateBulkActionButtons();" id="interest-${interest.project_id}">
+                </div>
                 <div class="dashboard-item-header">
                     <h4 class="dashboard-item-title">${this.escapeHtml(interest.title)}</h4>
                     <div class="dashboard-item-meta">
@@ -1657,12 +1895,15 @@ class CapstoneApp {
                     <button class="btn-dashboard-action" onclick="event.stopPropagation(); window.capstoneApp.showProjectDetails(${interest.project_id})">
                         View Details
                     </button>
-                    <button class="btn-dashboard-action danger" onclick="event.stopPropagation(); window.capstoneApp.withdrawInterest(${interest.project_id})">
+                    <button class="btn-dashboard-action danger" onclick="event.stopPropagation(); window.capstoneApp.withdrawInterest(${interest.project_id}, this)">
                         Withdraw Interest
                     </button>
                 </div>
             </div>
         `).join('');
+        
+        // Setup bulk action event listeners
+        this.setupBulkActions();
     }
 
     renderFavoritesList(favorites) {
@@ -1750,6 +1991,159 @@ class CapstoneApp {
         });
     }
 
+    setupBulkActions() {
+        const selectAllBtn = document.getElementById('selectAllInterests');
+        const bulkWithdrawBtn = document.getElementById('bulkWithdrawBtn');
+        
+        if (selectAllBtn) {
+            selectAllBtn.onclick = () => this.toggleSelectAllInterests();
+        }
+        
+        if (bulkWithdrawBtn) {
+            bulkWithdrawBtn.onclick = () => this.bulkWithdrawInterests();
+        }
+    }
+
+    toggleInterestSelection(projectId) {
+        const checkbox = document.getElementById(`interest-${projectId}`);
+        const item = document.querySelector(`[data-project-id="${projectId}"]`);
+        
+        if (checkbox && item) {
+            if (checkbox.checked) {
+                item.classList.add('selected');
+            } else {
+                item.classList.remove('selected');
+            }
+            
+            this.updateBulkActionButtons();
+        }
+    }
+
+    toggleSelectAllInterests() {
+        const checkboxes = document.querySelectorAll('#interestsList input[type="checkbox"]');
+        const selectAllBtn = document.getElementById('selectAllInterests');
+        const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+        
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = !allChecked;
+            const projectId = checkbox.id.replace('interest-', '');
+            const item = document.querySelector(`[data-project-id="${projectId}"]`);
+            
+            if (item) {
+                if (checkbox.checked) {
+                    item.classList.add('selected');
+                } else {
+                    item.classList.remove('selected');
+                }
+            }
+        });
+        
+        selectAllBtn.textContent = allChecked ? 'Select All' : 'Deselect All';
+        this.updateBulkActionButtons();
+    }
+
+    updateBulkActionButtons() {
+        const checkboxes = document.querySelectorAll('#interestsList input[type="checkbox"]');
+        const selectedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+        const bulkWithdrawBtn = document.getElementById('bulkWithdrawBtn');
+        const selectAllBtn = document.getElementById('selectAllInterests');
+        
+        if (bulkWithdrawBtn) {
+            if (selectedCount > 0) {
+                bulkWithdrawBtn.textContent = `Withdraw Selected (${selectedCount})`;
+                bulkWithdrawBtn.disabled = false;
+            } else {
+                bulkWithdrawBtn.textContent = 'Withdraw Selected';
+                bulkWithdrawBtn.disabled = true;
+            }
+        }
+        
+        if (selectAllBtn) {
+            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+            selectAllBtn.textContent = allChecked ? 'Deselect All' : 'Select All';
+        }
+    }
+
+    async bulkWithdrawInterests() {
+        const checkboxes = document.querySelectorAll('#interestsList input[type="checkbox"]:checked');
+        const selectedProjectIds = Array.from(checkboxes).map(cb => 
+            parseInt(cb.id.replace('interest-', ''))
+        );
+        
+        if (selectedProjectIds.length === 0) {
+            this.showWarningToast('No Selection', 'Please select at least one project to withdraw from.');
+            return;
+        }
+        
+        // Enhanced confirmation for bulk action
+        const confirmMessage = `Are you sure you want to withdraw your interest from ${selectedProjectIds.length} project${selectedProjectIds.length !== 1 ? 's' : ''}?\n\nThis action will:\n• Remove you from all selected projects' interested students lists\n• Free up ${selectedProjectIds.length} of your interest slots\n• Notify the project clients of your withdrawals\n\nThis action cannot be undone.`;
+        
+        if (!confirm(confirmMessage)) {
+            return;
+        }
+        
+        const bulkWithdrawBtn = document.getElementById('bulkWithdrawBtn');
+        const originalText = bulkWithdrawBtn.textContent;
+        
+        try {
+            // Set loading state
+            bulkWithdrawBtn.disabled = true;
+            bulkWithdrawBtn.classList.add('btn-loading');
+            bulkWithdrawBtn.textContent = 'Withdrawing...';
+            
+            const response = await fetch('/api/students/interests/bulk', {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${window.authManager.getToken()}`
+                },
+                credentials: 'include',
+                body: JSON.stringify({
+                    projectIds: selectedProjectIds
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok) {
+                const { successful, errors } = data.summary;
+                
+                if (successful > 0) {
+                    this.showSuccessToast(
+                        'Bulk Withdrawal Complete',
+                        `Successfully withdrew from ${successful} project${successful !== 1 ? 's' : ''}. ${errors > 0 ? `${errors} withdrawals failed.` : ''}`
+                    );
+                }
+                
+                if (errors > 0) {
+                    this.showWarningToast(
+                        'Some Withdrawals Failed',
+                        `${errors} withdrawal${errors !== 1 ? 's' : ''} could not be completed. Please try again for those projects.`
+                    );
+                }
+                
+                // Refresh dashboard
+                await this.loadStudentDashboard();
+                await this.loadProjects();
+                
+            } else {
+                this.showErrorToast('Bulk Withdrawal Failed', data.error || 'Failed to withdraw from selected projects.');
+            }
+            
+        } catch (error) {
+            console.error('Error in bulk withdrawal:', error);
+            this.showErrorToast(
+                'Network Error',
+                'Unable to connect to the server. Please try again.'
+            );
+        } finally {
+            // Reset button state
+            bulkWithdrawBtn.disabled = false;
+            bulkWithdrawBtn.classList.remove('btn-loading');
+            bulkWithdrawBtn.textContent = originalText;
+        }
+    }
+
     async loadPendingProjects() {
         try {
             this.showLoading('pendingProjectsList');
@@ -1766,7 +2160,8 @@ class CapstoneApp {
             }
 
             const data = await response.json();
-            this.renderPendingProjects(data.projects || []);
+            this.pendingProjects = data.projects || [];
+            this.renderPendingProjects(this.pendingProjects);
             
         } catch (error) {
             console.error('Error loading pending projects:', error);
@@ -1778,28 +2173,54 @@ class CapstoneApp {
         const container = document.getElementById('pendingProjectsList');
         
         if (!projects || projects.length === 0) {
-            container.innerHTML = '<div class="loading">No pending projects</div>';
+            container.innerHTML = '<div class="admin-empty"><h4>No pending projects</h4><p>All submitted projects have been reviewed.</p></div>';
             return;
         }
 
         container.innerHTML = projects.map(project => `
-            <div class="project-card admin-project-card">
-                <h3 class="project-title">${this.escapeHtml(project.title)}</h3>
-                <div class="project-client">${this.escapeHtml(project.organization_name)}</div>
-                <p class="project-description">${this.escapeHtml(project.description.substring(0, 150))}...</p>
-                <div class="project-meta">
-                    <span class="project-semester">${this.formatSemester(project.semester_availability)}</span>
-                    <span class="project-date">Submitted: ${new Date(project.created_at).toLocaleDateString()}</span>
+            <div class="project-card admin-project-card" data-project-id="${project.id}">
+                <div class="admin-project-header">
+                    <input type="checkbox" class="pending-project-checkbox" data-project-id="${project.id}">
+                    <div class="project-status-badge">
+                        <span class="status-indicator status-pending">Pending Review</span>
+                    </div>
                 </div>
+                <h3 class="project-title">${this.escapeHtml(project.title)}</h3>
+                <div class="project-client">
+                    <span class="client-icon">🏢</span>
+                    ${this.escapeHtml(project.organization_name)}
+                </div>
+                <p class="project-description">${this.escapeHtml((project.description || '').substring(0, 150))}${project.description && project.description.length > 150 ? '...' : ''}</p>
+                
+                <div class="project-quick-info">
+                    <div class="quick-info-item">
+                        <span class="quick-info-icon">📅</span>
+                        <span>${this.formatSemester(project.semester_availability)}</span>
+                    </div>
+                    <div class="quick-info-item">
+                        <span class="quick-info-icon">👥</span>
+                        <span>${project.max_students || 'Not specified'} students</span>
+                    </div>
+                    <div class="quick-info-item">
+                        <span class="quick-info-icon">⏱️</span>
+                        <span>${project.duration_weeks || 'Not specified'} weeks</span>
+                    </div>
+                </div>
+                
+                <div class="project-meta">
+                    <span class="project-date">Submitted: ${new Date(project.created_at).toLocaleDateString()}</span>
+                    <span class="project-type">${this.formatProjectType(project.project_type)}</span>
+                </div>
+                
                 <div class="admin-actions">
-                    <button class="btn btn-primary" onclick="app.approveProject(${project.id})">
-                        Approve
+                    <button class="btn btn-primary" onclick="window.capstoneApp.approveProject(${project.id})">
+                        ✓ Approve
                     </button>
-                    <button class="btn btn-outline" onclick="app.showProjectDetails(${project.id})">
-                        View Details
+                    <button class="btn btn-outline" onclick="window.capstoneApp.showProjectDetails(${project.id})">
+                        👁️ View Details
                     </button>
-                    <button class="btn btn-secondary" onclick="app.rejectProject(${project.id})">
-                        Reject
+                    <button class="btn btn-danger" onclick="window.capstoneApp.rejectProject(${project.id})">
+                        ✗ Reject
                     </button>
                 </div>
             </div>
@@ -1808,6 +2229,14 @@ class CapstoneApp {
 
     async approveProject(projectId) {
         try {
+            const projectElement = document.querySelector(`[data-project-id="${projectId}"]`);
+            const approveBtn = projectElement?.querySelector('.btn-primary');
+            
+            if (approveBtn) {
+                approveBtn.classList.add('btn-loading');
+                approveBtn.disabled = true;
+            }
+
             const response = await fetch(`/api/projects/${projectId}/status`, {
                 method: 'PATCH',
                 headers: {
@@ -1823,22 +2252,42 @@ class CapstoneApp {
             const data = await response.json();
 
             if (response.ok) {
-                console.log('Project approved successfully!');
+                this.showSuccessToast('Project Approved', 'The project has been approved and is now visible to students.');
                 await this.loadPendingProjects(); // Refresh the list
+                this.selectedPendingProjects.delete(projectId);
+                this.updatePendingBulkActions();
             } else {
-                console.log(data.error || 'Failed to approve project');
+                this.showErrorToast('Approval Failed', data.error || 'Failed to approve project');
             }
 
         } catch (error) {
             console.error('Error approving project:', error);
-            console.log('Network error. Please try again.');
+            this.showErrorToast('Network Error', 'Please check your connection and try again.');
         }
     }
 
     async rejectProject(projectId) {
-        const feedback = prompt('Optional: Provide feedback for rejection:') || '';
+        // Enhanced confirmation dialog
+        const project = this.pendingProjects?.find(p => p.id === projectId);
+        const projectTitle = project ? project.title : 'this project';
+        
+        const confirmMessage = `Are you sure you want to reject "${projectTitle}"?\n\nThis action will:\n• Remove the project from the pending queue\n• Notify the client of the rejection\n• Allow the client to resubmit with modifications\n\nThis action cannot be undone.`;
+        
+        if (!confirm(confirmMessage)) {
+            return;
+        }
+        
+        const feedback = prompt('Optional: Provide feedback for rejection (this will be sent to the client):') || '';
         
         try {
+            const projectElement = document.querySelector(`[data-project-id="${projectId}"]`);
+            const rejectBtn = projectElement?.querySelector('.btn-danger');
+            
+            if (rejectBtn) {
+                rejectBtn.classList.add('btn-loading');
+                rejectBtn.disabled = true;
+            }
+
             const response = await fetch(`/api/projects/${projectId}/status`, {
                 method: 'PATCH',
                 headers: {
@@ -1855,16 +2304,571 @@ class CapstoneApp {
             const data = await response.json();
 
             if (response.ok) {
-                console.log('Project rejected successfully!');
+                this.showWarningToast('Project Rejected', `The project has been rejected${feedback ? ' with feedback' : ''}.`);
                 await this.loadPendingProjects(); // Refresh the list
+                this.selectedPendingProjects.delete(projectId);
+                this.updatePendingBulkActions();
             } else {
-                console.log(data.error || 'Failed to reject project');
+                this.showErrorToast('Rejection Failed', data.error || 'Failed to reject project');
             }
 
         } catch (error) {
             console.error('Error rejecting project:', error);
-            console.log('Network error. Please try again.');
+            this.showErrorToast('Network Error', 'Please check your connection and try again.');
         }
+    }
+
+    // Admin Statistics Methods
+    async loadAdminStatistics() {
+        try {
+            this.showLoading('adminStats');
+            
+            const response = await fetch('/api/admin/statistics', {
+                headers: {
+                    'Authorization': `Bearer ${window.authManager.getToken()}`
+                },
+                credentials: 'include'
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            this.renderAdminStatistics(data);
+            
+        } catch (error) {
+            console.error('Error loading admin statistics:', error);
+            this.showError('adminStats', 'Failed to load system statistics.');
+        }
+    }
+
+    renderAdminStatistics(stats) {
+        const container = document.getElementById('adminStats');
+        
+        container.innerHTML = `
+            <div class="admin-stat-card">
+                <h4>Total Projects</h4>
+                <div class="admin-stat-number">${stats.total_projects || 0}</div>
+                <div class="admin-stat-description">All projects in the system</div>
+                <div class="admin-stat-trend positive">
+                    <span>📈</span> ${stats.projects_this_month || 0} this month
+                </div>
+            </div>
+            
+            <div class="admin-stat-card">
+                <h4>Pending Reviews</h4>
+                <div class="admin-stat-number">${stats.pending_projects || 0}</div>
+                <div class="admin-stat-description">Awaiting approval</div>
+                <div class="admin-stat-trend ${stats.pending_projects > 5 ? 'negative' : 'positive'}">
+                    <span>${stats.pending_projects > 5 ? '⚠️' : '✅'}</span> Review queue status
+                </div>
+            </div>
+            
+            <div class="admin-stat-card">
+                <h4>Active Projects</h4>
+                <div class="admin-stat-number">${stats.active_projects || 0}</div>
+                <div class="admin-stat-description">Currently available to students</div>
+                <div class="admin-stat-trend positive">
+                    <span>🎯</span> ${stats.avg_interest_per_project || 0} avg. interest
+                </div>
+            </div>
+            
+            <div class="admin-stat-card">
+                <h4>Total Users</h4>
+                <div class="admin-stat-number">${stats.total_users || 0}</div>
+                <div class="admin-stat-description">Students, clients, and admins</div>
+                <div class="admin-stat-trend positive">
+                    <span>👥</span> ${stats.users_this_month || 0} new this month
+                </div>
+            </div>
+            
+            <div class="admin-stat-card">
+                <h4>Student Engagement</h4>
+                <div class="admin-stat-number">${stats.total_interests || 0}</div>
+                <div class="admin-stat-description">Total interest expressions</div>
+                <div class="admin-stat-trend positive">
+                    <span>🔥</span> ${stats.engagement_rate || 0}% engagement rate
+                </div>
+            </div>
+            
+            <div class="admin-stat-card">
+                <h4>Organization Partners</h4>
+                <div class="admin-stat-number">${stats.total_organizations || 0}</div>
+                <div class="admin-stat-description">Industry partners</div>
+                <div class="admin-stat-trend positive">
+                    <span>🏢</span> ${stats.new_organizations || 0} new partners
+                </div>
+            </div>
+        `;
+    }
+
+    // All Projects Management
+    async loadAllProjects() {
+        // Prevent multiple simultaneous loads
+        if (this.loadingAllProjects) {
+            console.log('Already loading all projects, skipping...');
+            return;
+        }
+        
+        this.loadingAllProjects = true;
+        
+        try {
+            console.log('Loading all projects...');
+            this.showLoading('allProjectsList');
+            
+            const response = await fetch('/api/admin/projects/all', {
+                headers: {
+                    'Authorization': `Bearer ${window.authManager.getToken()}`
+                },
+                credentials: 'include'
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            console.log('All projects data:', data);
+            this.allProjects = data.projects || [];
+            console.log('Projects to render:', this.allProjects);
+            this.renderAllProjects(this.allProjects);
+            
+        } catch (error) {
+            console.error('Error loading all projects:', error);
+            this.showError('allProjectsList', 'Failed to load projects.');
+        } finally {
+            this.loadingAllProjects = false;
+        }
+    }
+
+    renderAllProjects(projects) {
+        const container = document.getElementById('allProjectsList');
+        console.log('Container element:', container);
+        console.log('Container exists:', !!container);
+        
+        if (!projects || projects.length === 0) {
+            container.innerHTML = '<div class="admin-empty"><h4>No projects found</h4><p>No projects match the current filters.</p></div>';
+            return;
+        }
+
+        console.log('Rendering projects, count:', projects.length);
+        console.log('First project:', projects[0]);
+        console.log('Project statuses:', projects.map(p => p.status));
+
+        container.innerHTML = projects.map(project => `
+            <div class="project-card admin-project-card" data-project-id="${project.id}">
+                <div class="project-header">
+                    <h3 class="project-title">${this.escapeHtml(project.title)}</h3>
+                    <div class="project-status-badge">
+                        <span class="status-indicator status-${project.status}">${this.formatStatus(project.status)}</span>
+                    </div>
+                </div>
+                
+                <div class="project-client">
+                    <span class="client-icon">🏢</span>
+                    ${this.escapeHtml(project.organization_name)}
+                </div>
+                
+                <p class="project-description">${this.escapeHtml((project.description || '').substring(0, 120))}${project.description && project.description.length > 120 ? '...' : ''}</p>
+                
+                <div class="project-stats">
+                    <div class="stat-item">
+                        <span>👥 ${project.interest_count || 0} interested</span>
+                    </div>
+                    <div class="stat-item">
+                        <span>⭐ ${project.favorites_count || 0} favorites</span>
+                    </div>
+                    <div class="stat-item">
+                        <span>📅 ${this.formatSemester(project.semester_availability)}</span>
+                    </div>
+                </div>
+                
+                <div class="project-meta">
+                    <span class="project-date">Created: ${new Date(project.created_at).toLocaleDateString()}</span>
+                    <span class="project-type">${this.formatProjectType(project.project_type)}</span>
+                </div>
+                
+                <div class="admin-actions">
+                    <button class="btn btn-outline" onclick="window.capstoneApp.showProjectDetails(${project.id})">
+                        View Details
+                    </button>
+                    ${project.status === 'approved' ? `
+                        <button class="btn btn-warning" onclick="window.capstoneApp.deactivateProject(${project.id})">
+                            Deactivate
+                        </button>
+                    ` : ''}
+                    ${project.status === 'active' ? `
+                        <button class="btn btn-secondary" onclick="window.capstoneApp.archiveProject(${project.id})">
+                            Archive
+                        </button>
+                    ` : ''}
+                </div>
+            </div>
+        `).join('');
+        
+        console.log('HTML set, container innerHTML length:', container.innerHTML.length);
+        console.log('Container has content:', container.innerHTML.substring(0, 200));
+        
+        // Debug: Add background to see if content is there
+        container.style.backgroundColor = '#f0f0f0';
+        container.style.minHeight = '200px';
+        console.log('Container computed styles:', window.getComputedStyle(container).display);
+        
+        // Check if content persists after a short delay
+        setTimeout(() => {
+            console.log('After 100ms - Container innerHTML length:', container.innerHTML.length);
+            console.log('After 100ms - Container children:', container.children.length);
+            if (container.innerHTML.length === 0) {
+                console.error('Content was cleared!');
+            }
+            
+            // Check visibility of first child
+            if (container.children.length > 0) {
+                const firstChild = container.children[0];
+                const rect = firstChild.getBoundingClientRect();
+                console.log('First project card visibility:', {
+                    display: window.getComputedStyle(firstChild).display,
+                    visibility: window.getComputedStyle(firstChild).visibility,
+                    opacity: window.getComputedStyle(firstChild).opacity,
+                    position: window.getComputedStyle(firstChild).position,
+                    width: rect.width,
+                    height: rect.height,
+                    top: rect.top,
+                    left: rect.left
+                });
+                
+                // Check if parent panel is visible
+                const panel = document.getElementById('allProjectsPanel');
+                console.log('Panel visibility:', {
+                    display: window.getComputedStyle(panel).display,
+                    classNames: panel.className
+                });
+            }
+        }, 100);
+    }
+
+    filterAllProjects() {
+        const searchTerm = document.getElementById('allProjectsSearch')?.value.toLowerCase() || '';
+        const statusFilter = document.getElementById('allProjectsStatus')?.value || '';
+        const sortBy = document.getElementById('allProjectsSort')?.value || 'newest';
+        
+        let filtered = [...this.allProjects];
+        
+        // Apply search filter
+        if (searchTerm) {
+            filtered = filtered.filter(project => 
+                project.title.toLowerCase().includes(searchTerm) ||
+                project.organization_name.toLowerCase().includes(searchTerm) ||
+                project.description.toLowerCase().includes(searchTerm)
+            );
+        }
+        
+        // Apply status filter
+        if (statusFilter) {
+            filtered = filtered.filter(project => project.status === statusFilter);
+        }
+        
+        // Apply sorting
+        switch (sortBy) {
+            case 'newest':
+                filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                break;
+            case 'oldest':
+                filtered.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+                break;
+            case 'status':
+                filtered.sort((a, b) => a.status.localeCompare(b.status));
+                break;
+            case 'interest':
+                filtered.sort((a, b) => (b.interest_count || 0) - (a.interest_count || 0));
+                break;
+        }
+        
+        this.renderAllProjects(filtered);
+    }
+
+    // User Management
+    async loadUserManagement() {
+        try {
+            this.showLoading('usersList');
+            
+            const response = await fetch('/api/admin/users', {
+                headers: {
+                    'Authorization': `Bearer ${window.authManager.getToken()}`
+                },
+                credentials: 'include'
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            this.allUsers = data.users || [];
+            this.renderUserManagement(this.allUsers);
+            
+        } catch (error) {
+            console.error('Error loading users:', error);
+            this.showError('usersList', 'Failed to load users.');
+        }
+    }
+
+    renderUserManagement(users) {
+        const container = document.getElementById('usersList');
+        
+        if (!users || users.length === 0) {
+            container.innerHTML = '<div class="admin-empty"><h4>No users found</h4><p>No users match the current filters.</p></div>';
+            return;
+        }
+
+        container.innerHTML = `
+            <div class="admin-users-table">
+                <div class="users-table-header">
+                    <div class="user-col-name">Name</div>
+                    <div class="user-col-email">Email</div>
+                    <div class="user-col-type">Type</div>
+                    <div class="user-col-joined">Joined</div>
+                    <div class="user-col-activity">Activity</div>
+                    <div class="user-col-actions">Actions</div>
+                </div>
+                ${users.map(user => `
+                    <div class="users-table-row" data-user-id="${user.id}">
+                        <div class="user-col-name">
+                            <div class="user-name">${this.escapeHtml(user.full_name || user.contact_name || 'N/A')}</div>
+                            ${user.organization_name ? `<div class="user-org">${this.escapeHtml(user.organization_name)}</div>` : ''}
+                        </div>
+                        <div class="user-col-email">${this.escapeHtml(user.email)}</div>
+                        <div class="user-col-type">
+                            <span class="user-type-badge user-type-${user.type}">${user.type}</span>
+                        </div>
+                        <div class="user-col-joined">${new Date(user.created_at).toLocaleDateString()}</div>
+                        <div class="user-col-activity">
+                            ${user.type === 'student' ? `${user.interests_count || 0} interests` : ''}
+                            ${user.type === 'client' ? `${user.projects_count || 0} projects` : ''}
+                            ${user.type === 'admin' ? 'Admin' : ''}
+                        </div>
+                        <div class="user-col-actions">
+                            <button class="btn btn-outline btn-sm" onclick="window.capstoneApp.viewUserDetails(${user.id})">
+                                View
+                            </button>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    }
+
+    // Bulk Operations
+    async bulkApproveProjects() {
+        if (this.selectedPendingProjects.size === 0) {
+            this.showWarningToast('No Selection', 'Please select projects to approve.');
+            return;
+        }
+
+        const confirmMessage = `Are you sure you want to approve ${this.selectedPendingProjects.size} selected project${this.selectedPendingProjects.size > 1 ? 's' : ''}?\n\nThis will make them visible to students immediately.`;
+        
+        if (!confirm(confirmMessage)) {
+            return;
+        }
+
+        try {
+            const projectIds = Array.from(this.selectedPendingProjects);
+            
+            const response = await fetch('/api/admin/projects/bulk-approve', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${window.authManager.getToken()}`
+                },
+                credentials: 'include',
+                body: JSON.stringify({ projectIds })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                this.showSuccessToast('Bulk Approval Complete', `${data.approved || projectIds.length} projects have been approved.`);
+                await this.loadPendingProjects();
+                this.selectedPendingProjects.clear();
+                this.updatePendingBulkActions();
+            } else {
+                this.showErrorToast('Bulk Approval Failed', data.error || 'Failed to approve projects');
+            }
+
+        } catch (error) {
+            console.error('Error bulk approving projects:', error);
+            this.showErrorToast('Network Error', 'Please check your connection and try again.');
+        }
+    }
+
+    async bulkRejectProjects() {
+        if (this.selectedPendingProjects.size === 0) {
+            this.showWarningToast('No Selection', 'Please select projects to reject.');
+            return;
+        }
+
+        const confirmMessage = `Are you sure you want to reject ${this.selectedPendingProjects.size} selected project${this.selectedPendingProjects.size > 1 ? 's' : ''}?\n\nThis action cannot be undone.`;
+        
+        if (!confirm(confirmMessage)) {
+            return;
+        }
+
+        const feedback = prompt('Optional: Provide feedback for rejection (will be sent to all selected clients):') || '';
+
+        try {
+            const projectIds = Array.from(this.selectedPendingProjects);
+            
+            const response = await fetch('/api/admin/projects/bulk-reject', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${window.authManager.getToken()}`
+                },
+                credentials: 'include',
+                body: JSON.stringify({ projectIds, feedback })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                this.showWarningToast('Bulk Rejection Complete', `${data.rejected || projectIds.length} projects have been rejected.`);
+                await this.loadPendingProjects();
+                this.selectedPendingProjects.clear();
+                this.updatePendingBulkActions();
+            } else {
+                this.showErrorToast('Bulk Rejection Failed', data.error || 'Failed to reject projects');
+            }
+
+        } catch (error) {
+            console.error('Error bulk rejecting projects:', error);
+            this.showErrorToast('Network Error', 'Please check your connection and try again.');
+        }
+    }
+
+    clearPendingSelection() {
+        this.selectedPendingProjects.clear();
+        document.querySelectorAll('.pending-project-checkbox').forEach(checkbox => {
+            checkbox.checked = false;
+        });
+        this.updatePendingBulkActions();
+    }
+
+    // Filter Methods
+    filterPendingProjects() {
+        const searchTerm = document.getElementById('pendingProjectsSearch')?.value.toLowerCase() || '';
+        const sortBy = document.getElementById('pendingProjectsSort')?.value || 'newest';
+        
+        let filtered = [...(this.pendingProjects || [])];
+        
+        // Apply search filter
+        if (searchTerm) {
+            filtered = filtered.filter(project => 
+                (project.title || '').toLowerCase().includes(searchTerm) ||
+                (project.organization_name || '').toLowerCase().includes(searchTerm) ||
+                (project.description || '').toLowerCase().includes(searchTerm)
+            );
+        }
+        
+        // Apply sorting
+        filtered.sort((a, b) => {
+            switch (sortBy) {
+                case 'oldest':
+                    return new Date(a.created_at) - new Date(b.created_at);
+                case 'organization':
+                    return (a.organization_name || '').localeCompare(b.organization_name || '');
+                case 'title':
+                    return (a.title || '').localeCompare(b.title || '');
+                default: // newest
+                    return new Date(b.created_at) - new Date(a.created_at);
+            }
+        });
+        
+        this.renderPendingProjects(filtered);
+    }
+
+    filterAllProjects() {
+        const searchTerm = document.getElementById('allProjectsSearch')?.value.toLowerCase() || '';
+        const statusFilter = document.getElementById('allProjectsStatus')?.value || '';
+        const sortBy = document.getElementById('allProjectsSort')?.value || 'newest';
+        
+        let filtered = [...(this.allProjects || [])];
+        
+        // Apply search filter
+        if (searchTerm) {
+            filtered = filtered.filter(project => 
+                (project.title || '').toLowerCase().includes(searchTerm) ||
+                (project.organization_name || '').toLowerCase().includes(searchTerm) ||
+                (project.description || '').toLowerCase().includes(searchTerm)
+            );
+        }
+        
+        // Apply status filter
+        if (statusFilter) {
+            filtered = filtered.filter(project => project.status === statusFilter);
+        }
+        
+        // Apply sorting
+        filtered.sort((a, b) => {
+            switch (sortBy) {
+                case 'oldest':
+                    return new Date(a.created_at) - new Date(b.created_at);
+                case 'status':
+                    return (a.status || '').localeCompare(b.status || '');
+                case 'interest':
+                    return (b.interest_count || 0) - (a.interest_count || 0);
+                default: // newest
+                    return new Date(b.created_at) - new Date(a.created_at);
+            }
+        });
+        
+        this.renderAllProjects(filtered);
+    }
+
+    filterUsers() {
+        const searchTerm = document.getElementById('usersSearch')?.value.toLowerCase() || '';
+        const typeFilter = document.getElementById('usersType')?.value || '';
+        
+        let filtered = [...(this.allUsers || [])];
+        
+        // Apply search filter
+        if (searchTerm) {
+            filtered = filtered.filter(user => 
+                (user.full_name || user.contact_name || '').toLowerCase().includes(searchTerm) ||
+                (user.email || '').toLowerCase().includes(searchTerm) ||
+                (user.organization_name || '').toLowerCase().includes(searchTerm)
+            );
+        }
+        
+        // Apply type filter
+        if (typeFilter) {
+            filtered = filtered.filter(user => user.type === typeFilter);
+        }
+        
+        this.renderUserManagement(filtered);
+    }
+
+    // Helper Methods for Admin
+    formatStatus(status) {
+        const statusMap = {
+            'pending': 'Pending Review',
+            'approved': 'Approved',
+            'active': 'Active',
+            'rejected': 'Rejected',
+            'completed': 'Completed',
+            'inactive': 'Inactive'
+        };
+        return statusMap[status] || status;
+    }
+
+    formatProjectType(type) {
+        if (!type) return 'Not specified';
+        return type.charAt(0).toUpperCase() + type.slice(1).replace(/([A-Z])/g, ' $1');
+    }
+
+    viewUserDetails(userId) {
+        // Placeholder for user details functionality
+        this.showInfoToast('User Details', 'User details functionality coming soon.');
     }
 
     showModal() {
@@ -2038,6 +3042,72 @@ class CapstoneApp {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    // Toast notification system
+    showToast(type, title, message, duration = 5000) {
+        const toastContainer = document.getElementById('toastContainer');
+        if (!toastContainer) return;
+
+        const toastId = 'toast-' + Date.now();
+        const iconMap = {
+            success: '✓',
+            error: '✕',
+            warning: '⚠',
+            info: 'ℹ'
+        };
+
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.id = toastId;
+        toast.innerHTML = `
+            <div class="toast-icon">${iconMap[type] || iconMap.info}</div>
+            <div class="toast-content">
+                <div class="toast-title">${this.escapeHtml(title)}</div>
+                ${message ? `<div class="toast-message">${this.escapeHtml(message)}</div>` : ''}
+            </div>
+            <button class="toast-close" onclick="window.capstoneApp.dismissToast('${toastId}')">&times;</button>
+        `;
+
+        toastContainer.appendChild(toast);
+
+        // Auto-dismiss after duration
+        if (duration > 0) {
+            setTimeout(() => {
+                this.dismissToast(toastId);
+            }, duration);
+        }
+
+        return toastId;
+    }
+
+    dismissToast(toastId) {
+        const toast = document.getElementById(toastId);
+        if (!toast) return;
+
+        toast.classList.add('removing');
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.parentNode.removeChild(toast);
+            }
+        }, 300); // Match animation duration
+    }
+
+    // Convenience methods for different toast types
+    showSuccessToast(title, message, duration) {
+        return this.showToast('success', title, message, duration);
+    }
+
+    showErrorToast(title, message, duration) {
+        return this.showToast('error', title, message, duration);
+    }
+
+    showWarningToast(title, message, duration) {
+        return this.showToast('warning', title, message, duration);
+    }
+
+    showInfoToast(title, message, duration) {
+        return this.showToast('info', title, message, duration);
     }
 }
 
