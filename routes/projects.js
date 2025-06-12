@@ -20,6 +20,21 @@ router.get('/', optionalAuth, async (req, res) => {
             );
         }
         
+        // Add favorite and interest status for authenticated students
+        if (req.user && req.user.type === 'student') {
+            for (let project of projects) {
+                // Check if student has favorited this project
+                project.isFavorite = await database.isFavorite(req.user.id, project.id);
+                
+                // Check if student has expressed interest
+                const interests = await database.query(
+                    'SELECT id FROM student_interests WHERE student_id = ? AND project_id = ? AND is_active = 1',
+                    [req.user.id, project.id]
+                );
+                project.hasExpressedInterest = interests.length > 0;
+            }
+        }
+        
         // Apply pagination
         const startIndex = parseInt(offset);
         const endIndex = startIndex + parseInt(limit);

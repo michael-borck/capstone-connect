@@ -203,8 +203,10 @@ class CapstoneApp {
                         
                         ${isAuthenticated && userType === 'student' ? `
                             <div class="quick-actions">
-                                <button class="btn-quick-action" onclick="event.stopPropagation(); window.capstoneApp.toggleFavorite(${project.id})" title="Add to favorites">
-                                    ⭐
+                                <button class="btn-quick-action ${project.isFavorite ? 'favorited' : ''}" 
+                                        onclick="event.stopPropagation(); window.capstoneApp.toggleFavorite(${project.id})" 
+                                        title="${project.isFavorite ? 'Remove from favorites' : 'Add to favorites'}">
+                                    ${project.isFavorite ? '⭐' : '☆'}
                                 </button>
                             </div>
                         ` : ''}
@@ -391,9 +393,8 @@ class CapstoneApp {
                     actionButtons = `
                         <div style="text-align: center;">
                             <button class="btn ${hasExpressed ? 'btn-secondary' : 'btn-primary'}" 
-                                    onclick="app.${hasExpressed ? 'withdrawInterest' : 'expressInterest'}(${project.id})"
-                                    ${hasExpressed ? 'disabled' : ''}>
-                                ${hasExpressed ? 'Interest Expressed' : 'Express Interest'}
+                                    onclick="app.${hasExpressed ? 'withdrawInterest' : 'expressInterest'}(${project.id})">
+                                ${hasExpressed ? 'Withdraw Interest' : 'Express Interest'}
                             </button>
                             <button class="btn ${isFavorite ? 'btn-secondary' : 'btn-outline'}" 
                                     onclick="app.${isFavorite ? 'removeFromFavorites' : 'addToFavorites'}(${project.id})" 
@@ -610,6 +611,30 @@ class CapstoneApp {
         }
 
         try {
+            // First check current interest count
+            const statsResponse = await fetch('/api/students/stats', {
+                headers: {
+                    'Authorization': `Bearer ${window.authManager.getToken()}`
+                },
+                credentials: 'include'
+            });
+
+            if (statsResponse.ok) {
+                const stats = await statsResponse.json();
+                const remaining = stats.interests.remaining;
+                
+                if (remaining <= 0) {
+                    console.log(`You have reached the maximum limit of 5 project interests. You currently have ${stats.interests.current} active interests.`);
+                    return;
+                }
+                
+                // Show confirmation with remaining count
+                const confirmMessage = `You have ${remaining} interest${remaining !== 1 ? 's' : ''} remaining out of 5 maximum. Would you like to express interest in this project?`;
+                if (!confirm(confirmMessage)) {
+                    return;
+                }
+            }
+
             const message = prompt('Optional: Add a message to your interest expression:') || '';
             
             const response = await fetch('/api/students/interests', {
@@ -633,7 +658,11 @@ class CapstoneApp {
                 // Refresh project data
                 await this.loadProjects();
             } else {
-                console.log(data.error || 'Failed to express interest');
+                if (data.code === 'INTEREST_LIMIT_EXCEEDED') {
+                    console.log(`You have reached the maximum limit of ${data.maxAllowed} project interests. You currently have ${data.currentCount} active interests.`);
+                } else {
+                    console.log(data.error || 'Failed to express interest');
+                }
             }
 
         } catch (error) {
@@ -648,6 +677,11 @@ class CapstoneApp {
         }
 
         try {
+            // Confirm withdrawal
+            if (!confirm('Are you sure you want to withdraw your interest in this project?')) {
+                return;
+            }
+
             const response = await fetch(`/api/students/interests/${projectId}`, {
                 method: 'DELETE',
                 headers: {
@@ -703,8 +737,16 @@ class CapstoneApp {
 
             if (response.ok) {
                 console.log('Project added to favorites!');
-                // Refresh project details
-                await this.showProjectDetails(projectId);
+                // Update the project in our local data
+                const project = this.projects.find(p => p.id === projectId);
+                if (project) {
+                    project.isFavorite = true;
+                    this.renderProjects(this.projects);
+                }
+                // If modal is open, refresh project details
+                if (document.getElementById('modal').style.display === 'block') {
+                    await this.showProjectDetails(projectId);
+                }
             } else {
                 console.log(data.error || 'Failed to add to favorites');
             }
@@ -733,8 +775,16 @@ class CapstoneApp {
 
             if (response.ok) {
                 console.log('Project removed from favorites!');
-                // Refresh project details
-                await this.showProjectDetails(projectId);
+                // Update the project in our local data
+                const project = this.projects.find(p => p.id === projectId);
+                if (project) {
+                    project.isFavorite = false;
+                    this.renderProjects(this.projects);
+                }
+                // If modal is open, refresh project details
+                if (document.getElementById('modal').style.display === 'block') {
+                    await this.showProjectDetails(projectId);
+                }
             } else {
                 console.log(data.error || 'Failed to remove from favorites');
             }
@@ -759,12 +809,18 @@ class CapstoneApp {
         }
 
         try {
-            // First check if it's already a favorite
+            // Find the project in our current data
             const project = this.projects.find(p => p.id === projectId);
             if (!project) return;
 
-            // For now, just add to favorites (we'd need to track favorite status in project data)
-            await this.addToFavorites(projectId);
+            // Check current favorite status
+            const isFavorite = project.isFavorite;
+
+            if (isFavorite) {
+                await this.removeFromFavorites(projectId);
+            } else {
+                await this.addToFavorites(projectId);
+            }
             
         } catch (error) {
             console.error('Error toggling favorite:', error);

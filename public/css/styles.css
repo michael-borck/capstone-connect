@@ -590,6 +590,19 @@ body {
     transform: scale(1.1);
 }
 
+.btn-quick-action.favorited {
+    background: #ffd700;
+    border-color: #ffd700;
+    color: #333;
+}
+
+.btn-quick-action.favorited:hover {
+    background: #ffed4e;
+    border-color: #ffed4e;
+    color: #333;
+    transform: scale(1.1);
+}
+
 .project-meta {
     display: flex;
     justify-content: space-between;
