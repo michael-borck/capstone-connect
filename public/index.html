@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Curtin Capstone Project Management System - connecting industry clients with final-year students">
+    <title>Curtin Capstone Connect</title>
+    <link rel="stylesheet" href="/css/styles.css">
+    <link rel="icon" type="image/x-icon" href="/images/favicon.ico">
+</head>
+<body>
+    <div id="app">
+        <header class="header">
+            <div class="container">
+                <div class="header-content">
+                    <h1 class="logo">
+                        <span class="logo-text">Curtin Capstone Connect</span>
+                    </h1>
+                    <nav class="nav" id="mainNav">
+                        <ul class="nav-list">
+                            <li><a href="#home" class="nav-link active">Home</a></li>
+                            <li><a href="#projects" class="nav-link">Projects</a></li>
+                            <li><a href="#gallery" class="nav-link">Gallery</a></li>
+                            <li><a href="#login" class="nav-link" id="authNavLink">Login</a></li>
+                        </ul>
+                        <div id="userStatus" class="user-status" style="display: none;">
+                            <span id="userInfo"></span>
+                            <button id="logoutBtn" class="btn btn-outline btn-sm">Logout</button>
+                        </div>
+                    </nav>
+                    <button class="mobile-menu-toggle" id="mobileMenuToggle">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <main class="main">
+            <!-- Home Section -->
+            <section id="home" class="section section-home active">
+                <div class="container">
+                    <div class="hero">
+                        <h2 class="hero-title">Connect Industry with Innovation</h2>
+                        <p class="hero-subtitle">
+                            Bridging the gap between industry challenges and student talent through 
+                            meaningful capstone projects.
+                        </p>
+                        <div class="hero-actions">
+                            <button class="btn btn-primary" onclick="showSection('projects')">
+                                Browse Projects
+                            </button>
+                            <button class="btn btn-secondary" onclick="showSection('gallery')">
+                                View Success Stories
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="features">
+                        <div class="feature-grid">
+                            <div class="feature-card">
+                                <div class="feature-icon">🏢</div>
+                                <h3>For Industry Partners</h3>
+                                <p>Submit project proposals and connect with talented final-year students ready to tackle real-world challenges.</p>
+                                <button class="btn btn-outline" onclick="showClientRegistration()">Get Started</button>
+                            </div>
+                            <div class="feature-card">
+                                <div class="feature-icon">🎓</div>
+                                <h3>For Students</h3>
+                                <p>Discover exciting capstone opportunities that align with your skills and career aspirations.</p>
+                                <button class="btn btn-outline" onclick="showStudentRegistration()">Join Now</button>
+                            </div>
+                            <div class="feature-card">
+                                <div class="feature-icon">⚙️</div>
+                                <h3>For UC Staff</h3>
+                                <p>Streamline project management with powerful tools for approval, tracking, and analytics.</p>
+                                <button class="btn btn-outline" onclick="showAdminLogin()">Admin Portal</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Projects Section -->
+            <section id="projects" class="section section-projects">
+                <div class="container">
+                    <h2 class="section-title">Available Projects</h2>
+                    <div class="projects-container">
+                        <div class="projects-filters">
+                            <input type="text" id="searchInput" placeholder="Search projects by title, skills, or organization..." class="search-input">
+                            <select id="semesterFilter" class="filter-select">
+                                <option value="">All Semesters</option>
+                                <option value="semester1">Semester 1</option>
+                                <option value="semester2">Semester 2</option>
+                                <option value="both">Both Semesters</option>
+                            </select>
+                            <select id="projectTypeFilter" class="filter-select">
+                                <option value="">All Project Types</option>
+                                <option value="software">Software Development</option>
+                                <option value="research">Research Project</option>
+                                <option value="design">Design & UX</option>
+                                <option value="data">Data Analysis</option>
+                                <option value="hardware">Hardware/IoT</option>
+                                <option value="business">Business Analysis</option>
+                                <option value="other">Other</option>
+                            </select>
+                            <select id="popularityFilter" class="filter-select">
+                                <option value="">All Projects</option>
+                                <option value="high">High Interest (5+ students)</option>
+                                <option value="medium">Popular (3-4 students)</option>
+                                <option value="low">Some Interest (1-2 students)</option>
+                                <option value="new">New Opportunities (0 students)</option>
+                            </select>
+                        </div>
+                        <div id="projectsList" class="projects-grid">
+                            <div class="loading">Loading projects...</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Gallery Section -->
+            <section id="gallery" class="section section-gallery">
+                <div class="container">
+                    <h2 class="section-title">Success Stories</h2>
+                    <p class="section-subtitle">Explore past capstone projects that made a real impact</p>
+                    <div id="galleryList" class="gallery-grid">
+                        <div class="loading">Loading gallery...</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Admin Dashboard Section -->
+            <section id="admin" class="section section-admin">
+                <div class="container">
+                    <h2 class="section-title">Admin Dashboard</h2>
+                    <div class="admin-container">
+                        <div class="admin-tabs">
+                            <button class="admin-tab active" data-tab="pending">Pending Projects</button>
+                            <button class="admin-tab" data-tab="stats">Statistics</button>
+                            <button class="admin-tab" data-tab="all">All Projects</button>
+                        </div>
+                        
+                        <div class="admin-content">
+                            <div id="pendingProjects" class="admin-panel active">
+                                <h3>Projects Awaiting Approval</h3>
+                                <div id="pendingProjectsList" class="projects-grid">
+                                    <div class="loading">Loading pending projects...</div>
+                                </div>
+                            </div>
+
+                            <div id="statsPanel" class="admin-panel">
+                                <h3>System Statistics</h3>
+                                <div id="adminStats" class="stats-grid">
+                                    <div class="loading">Loading statistics...</div>
+                                </div>
+                            </div>
+
+                            <div id="allProjectsPanel" class="admin-panel">
+                                <h3>All Projects</h3>
+                                <div id="allProjectsList" class="projects-grid">
+                                    <div class="loading">Loading all projects...</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Client Dashboard Section -->
+            <section id="clientDashboard" class="section section-dashboard">
+                <div class="container">
+                    <div class="dashboard-header">
+                        <div id="clientInfo">
+                            <h2>Client Dashboard</h2>
+                        </div>
+                        <div class="dashboard-actions">
+                            <button class="btn btn-primary" onclick="showCreateProject()">Create New Project</button>
+                        </div>
+                    </div>
+
+                    <div id="clientStats" class="stats-grid">
+                        <!-- Stats will be populated by JavaScript -->
+                    </div>
+
+                    <div class="dashboard-content">
+                        <div class="dashboard-panel">
+                            <h3>Your Projects</h3>
+                            <div id="clientProjectsList" class="projects-grid">
+                                <div class="loading">Loading your projects...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Login Section -->
+            <section id="login" class="section section-login">
+                <div class="container">
+                    <div class="auth-container">
+                        <div class="auth-tabs">
+                            <button class="auth-tab active" data-tab="student">Student</button>
+                            <button class="auth-tab" data-tab="client">Industry Client</button>
+                            <button class="auth-tab" data-tab="admin">UC Staff</button>
+                        </div>
+                        
+                        <div class="auth-content">
+                            <div id="studentAuth" class="auth-panel active">
+                                <h3>Student Login</h3>
+                                <form id="studentLoginForm" class="auth-form">
+                                    <input type="email" name="email" placeholder="Student Email" required>
+                                    <input type="password" name="password" placeholder="Password" required>
+                                    <button type="submit" class="btn btn-primary">Login</button>
+                                </form>
+                                <p class="auth-link">
+                                    Don't have an account? 
+                                    <a href="#" onclick="showStudentRegistration()">Register here</a>
+                                </p>
+                            </div>
+
+                            <div id="clientAuth" class="auth-panel">
+                                <h3>Industry Client Login</h3>
+                                <form id="clientLoginForm" class="auth-form">
+                                    <input type="email" name="email" placeholder="Business Email" required>
+                                    <input type="password" name="password" placeholder="Password" required>
+                                    <button type="submit" class="btn btn-primary">Login</button>
+                                </form>
+                                <p class="auth-link">
+                                    New partner? 
+                                    <a href="#" onclick="showClientRegistration()">Submit your first project</a>
+                                </p>
+                            </div>
+
+                            <div id="adminAuth" class="auth-panel">
+                                <h3>UC Staff Login</h3>
+                                <form id="adminLoginForm" class="auth-form">
+                                    <input type="email" name="email" placeholder="UC Email" required>
+                                    <input type="password" name="password" placeholder="Password" required>
+                                    <button type="submit" class="btn btn-primary">Login</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <div class="container">
+                <div class="footer-content">
+                    <p>&copy; 2024 Curtin University. All rights reserved.</p>
+                    <p>Capstone Connect - Bridging Industry and Education</p>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Loading overlay -->
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="loading-spinner"></div>
+    </div>
+
+    <!-- Modal for project details, registration forms, etc. -->
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="closeModal()">&times;</span>
+            <div id="modalBody" class="modal-body">
+                <!-- Modal content will be dynamically inserted here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Client Registration Modal -->
+    <div id="clientRegistrationModal" class="modal">
+        <div class="modal-content large-modal">
+            <span class="modal-close" onclick="closeClientRegistrationModal()">&times;</span>
+            <div class="modal-body">
+                <h2>Join as Industry Partner</h2>
+                <p class="modal-subtitle">Register your organization and submit your first capstone project opportunity</p>
+                
+                <div class="registration-steps">
+                    <div class="step-indicator">
+                        <div class="step active" id="step1-indicator">
+                            <span class="step-number">1</span>
+                            <span class="step-title">Organization Details</span>
+                        </div>
+                        <div class="step" id="step2-indicator">
+                            <span class="step-number">2</span>
+                            <span class="step-title">Project Details</span>
+                        </div>
+                        <div class="step" id="step3-indicator">
+                            <span class="step-number">3</span>
+                            <span class="step-title">Review & Submit</span>
+                        </div>
+                    </div>
+
+                    <!-- Step 1: Organization Registration -->
+                    <div id="step1" class="registration-step active">
+                        <h3>Organization Information</h3>
+                        <p class="step-description">Tell us about your organization. Most fields are optional - add as much or as little as you'd like.</p>
+                        
+                        <form id="clientRegistrationForm" class="registration-form">
+                            <!-- Essential Information -->
+                            <div class="form-section">
+                                <h4>Essential Information</h4>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="organizationName">Organization Name *</label>
+                                        <input type="text" id="organizationName" name="organizationName" required 
+                                               placeholder="Your company or organization name">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="contactName">Primary Contact Name *</label>
+                                        <input type="text" id="contactName" name="contactName" required 
+                                               placeholder="Your full name">
+                                    </div>
+                                </div>
+
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="email">Business Email *</label>
+                                        <input type="email" id="email" name="email" required 
+                                               placeholder="your.email@company.com">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="phone">Phone Number</label>
+                                        <input type="tel" id="phone" name="phone" 
+                                               placeholder="+61 (0) 8 9266 7000">
+                                        <small class="form-help">Email or phone required for contact</small>
+                                    </div>
+                                </div>
+
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="password">Password *</label>
+                                        <input type="password" id="password" name="password" required 
+                                               placeholder="Create a secure password">
+                                        <small class="form-help">8+ characters with uppercase, lowercase, number, and special character</small>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="confirmPassword">Confirm Password *</label>
+                                        <input type="password" id="confirmPassword" name="confirmPassword" required 
+                                               placeholder="Confirm your password">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Optional Information -->
+                            <div class="form-section">
+                                <h4>Additional Information <span style="color: var(--text-light); font-weight: normal;">(Optional)</span></h4>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="contactTitle">Your Job Title</label>
+                                        <input type="text" id="contactTitle" name="contactTitle" 
+                                               placeholder="e.g., Project Manager, CTO, Business Development">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="industry">Industry</label>
+                                        <select id="industry" name="industry">
+                                            <option value="">Select Industry (Optional)</option>
+                                            <option value="technology">Technology</option>
+                                            <option value="healthcare">Healthcare</option>
+                                            <option value="finance">Finance & Banking</option>
+                                            <option value="manufacturing">Manufacturing</option>
+                                            <option value="energy">Energy & Resources</option>
+                                            <option value="retail">Retail & E-commerce</option>
+                                            <option value="construction">Construction</option>
+                                            <option value="education">Education</option>
+                                            <option value="government">Government</option>
+                                            <option value="nonprofit">Non-profit</option>
+                                            <option value="other">Other</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="website">Company Website</label>
+                                    <input type="url" id="website" name="website" 
+                                           placeholder="https://www.yourcompany.com">
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="orgDescription">Organization Description</label>
+                                    <textarea id="orgDescription" name="orgDescription" rows="3" 
+                                             placeholder="Brief description of your organization and what you do..."></textarea>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="address">Business Address</label>
+                                    <textarea id="address" name="address" rows="2" 
+                                             placeholder="Business address (can be added later if needed)"></textarea>
+                                </div>
+                            </div>
+
+                            <!-- Project Preferences -->
+                            <div class="form-section">
+                                <h4>Project Preferences</h4>
+                                <div class="form-group">
+                                    <label class="checkbox-label">
+                                        <input type="checkbox" id="discussFirst" name="discussFirst">
+                                        <span class="checkmark"></span>
+                                        I'd prefer to discuss project ideas with UC staff first (recommended for confidential projects or if you need an NDA)
+                                    </label>
+                                </div>
+                            </div>
+                        </form>
+                        
+                        <div class="step-navigation">
+                            <button type="button" class="btn btn-primary" onclick="nextStep()">
+                                Next: Project Details →
+                            </button>
+                            <button type="button" class="btn btn-outline" onclick="skipToReview()" style="margin-left: 1rem;">
+                                Skip Project Details
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Project Submission -->
+                    <div id="step2" class="registration-step">
+                        <h3>Your First Project Opportunity <span style="color: var(--text-light); font-weight: normal;">(Optional)</span></h3>
+                        <p class="step-description">If you have a specific project in mind, share the details below. Otherwise, you can skip this step and our UC staff will contact you to discuss project opportunities.</p>
+                        
+                        <form id="projectSubmissionForm" class="registration-form">
+                            <div class="form-group">
+                                <label for="projectTitle">Project Title</label>
+                                <input type="text" id="projectTitle" name="title" 
+                                       placeholder="Give your project a clear, descriptive title">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="projectDescription">Project Description</label>
+                                <textarea id="projectDescription" name="description" rows="6" 
+                                         placeholder="Provide a detailed description of the project, its goals, and the problem it aims to solve. Be specific about what students will be working on..."></textarea>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="requiredSkills">Required Skills</label>
+                                    <textarea id="requiredSkills" name="required_skills" rows="3" 
+                                             placeholder="List the key skills, technologies, or knowledge areas students should have (e.g., Python, web development, data analysis, project management...)"></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label for="toolsTechnologies">Tools & Technologies</label>
+                                    <textarea id="toolsTechnologies" name="tools_technologies" rows="3" 
+                                             placeholder="Specify the tools, platforms, and technologies students will use (e.g., React, AWS, Adobe Creative Suite, specific databases...)"></textarea>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="deliverables">Project Deliverables</label>
+                                <textarea id="deliverables" name="deliverables" rows="4" 
+                                         placeholder="Describe what students will deliver at the end of the project (e.g., working prototype, research report, mobile app, data analysis, recommendations...)"></textarea>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="semesterAvailability">Semester Availability</label>
+                                    <select id="semesterAvailability" name="semester_availability">
+                                        <option value="">Select Semester (Optional)</option>
+                                        <option value="semester1">Semester 1 (Feb - Jun)</option>
+                                        <option value="semester2">Semester 2 (Jul - Nov)</option>
+                                        <option value="both">Both Semesters</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="durationWeeks">Duration (Weeks)</label>
+                                    <select id="durationWeeks" name="duration_weeks">
+                                        <option value="">Select Duration (Optional)</option>
+                                        <option value="8">8 weeks</option>
+                                        <option value="12">12 weeks (Standard)</option>
+                                        <option value="16">16 weeks</option>
+                                        <option value="20">20 weeks</option>
+                                        <option value="24">24 weeks</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="maxStudents">Maximum Students</label>
+                                    <select id="maxStudents" name="max_students">
+                                        <option value="">Select Team Size</option>
+                                        <option value="1">1 Student (Individual)</option>
+                                        <option value="2">2 Students</option>
+                                        <option value="3">3 Students</option>
+                                        <option value="4">4 Students (Recommended)</option>
+                                        <option value="5">5 Students</option>
+                                        <option value="6">6+ Students</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="projectType">Project Type</label>
+                                    <select id="projectType" name="project_type">
+                                        <option value="">Select Type</option>
+                                        <option value="software">Software Development</option>
+                                        <option value="research">Research Project</option>
+                                        <option value="design">Design & UX</option>
+                                        <option value="data">Data Analysis</option>
+                                        <option value="hardware">Hardware/IoT</option>
+                                        <option value="business">Business Analysis</option>
+                                        <option value="other">Other</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="prerequisites">Prerequisites & Additional Requirements</label>
+                                <textarea id="prerequisites" name="prerequisites" rows="3" 
+                                         placeholder="Any specific prerequisites, certifications, or additional requirements for students (optional)"></textarea>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="additionalInfo">Additional Information</label>
+                                <textarea id="additionalInfo" name="additional_info" rows="3" 
+                                         placeholder="Any other details about the project, your organization, or expectations (optional)"></textarea>
+                            </div>
+                        </form>
+                        
+                        <div class="step-navigation">
+                            <button type="button" class="btn btn-outline" onclick="previousStep()">
+                                ← Back: Organization Details
+                            </button>
+                            <button type="button" class="btn btn-primary" onclick="nextStep()">
+                                Next: Review & Submit →
+                            </button>
+                            <button type="button" class="btn btn-secondary" onclick="skipToReview()" style="margin-left: 1rem;">
+                                Skip Project Details
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Review and Submit -->
+                    <div id="step3" class="registration-step">
+                        <h3>Review Your Registration</h3>
+                        <p class="step-description">Please review your organization and project details before submitting</p>
+                        
+                        <div id="registrationReview" class="registration-review">
+                            <!-- Review content will be populated by JavaScript -->
+                        </div>
+
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="termsAccepted" required>
+                                <span class="checkmark"></span>
+                                I agree to the <a href="#" onclick="showTermsModal()">Terms and Conditions</a> and confirm that the information provided is accurate
+                            </label>
+                        </div>
+
+                        <div class="step-navigation">
+                            <button type="button" class="btn btn-outline" onclick="previousStep()">
+                                ← Back: Project Details
+                            </button>
+                            <button type="button" class="btn btn-primary" onclick="submitRegistration()" id="submitBtn">
+                                Submit Registration
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="registrationSuccess" class="registration-success" style="display: none;">
+                    <div class="success-icon">✅</div>
+                    <h3>Registration Submitted Successfully!</h3>
+                    <p>Thank you for joining Curtin Capstone Connect. Your organization and project details have been submitted for review.</p>
+                    <div class="success-details">
+                        <h4>What happens next?</h4>
+                        <ul>
+                            <li>Our team will review your organization details within 2-3 business days</li>
+                            <li>Your project will be reviewed and may be approved for student viewing</li>
+                            <li>You'll receive an email confirmation with your login credentials</li>
+                            <li>Once approved, you can access your client dashboard to manage projects</li>
+                        </ul>
+                    </div>
+                    <button class="btn btn-primary" onclick="closeClientRegistrationModal()">
+                        Continue to Login
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Student Registration Modal -->
+    <div id="studentRegistrationModal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="closeStudentRegistrationModal()">&times;</span>
+            <div class="modal-body">
+                <h2>Student Registration</h2>
+                <p class="modal-subtitle">Join Curtin Capstone Connect to browse projects and express your interest</p>
+                
+                <form id="studentRegistrationForm" class="auth-form">
+                    <div class="form-group">
+                        <label for="studentFullName">Full Name *</label>
+                        <input type="text" id="studentFullName" name="fullName" required 
+                               placeholder="Enter your full name" 
+                               pattern="[a-zA-Z\s'-]+" 
+                               title="Name can only contain letters, spaces, hyphens, and apostrophes">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="studentEmail">Curtin Email Address *</label>
+                        <input type="email" id="studentEmail" name="email" required 
+                               placeholder="your.name@student.curtin.edu.au"
+                               pattern="[a-zA-Z0-9._%+-]+@(student\.)?curtin\.edu\.au"
+                               title="Please use your Curtin University email address">
+                        <small class="form-help">Please use your official Curtin University email address</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="studentId">Student ID (Optional)</label>
+                        <input type="text" id="studentId" name="studentId" 
+                               placeholder="12345678" 
+                               pattern="[0-9]{8}"
+                               title="Student ID must be 8 digits">
+                        <small class="form-help">Your 8-digit student ID (if available)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="studentPassword">Password *</label>
+                        <input type="password" id="studentPassword" name="password" required 
+                               placeholder="Create a secure password"
+                               minlength="8"
+                               title="Password must be at least 8 characters with uppercase, lowercase, number, and special character">
+                        <small class="form-help">Must contain: 8+ characters, uppercase, lowercase, number, and special character</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="studentPasswordConfirm">Confirm Password *</label>
+                        <input type="password" id="studentPasswordConfirm" name="passwordConfirm" required 
+                               placeholder="Confirm your password">
+                        <small class="form-help">Must match your password</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="studentTermsAccepted" name="termsAccepted" required>
+                            <span class="checkmark"></span>
+                            I agree to the <a href="#" onclick="showTermsModal()">Terms and Conditions</a> and Privacy Policy
+                        </label>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" id="studentRegisterBtn">
+                        Create Student Account
+                    </button>
+                </form>
+
+                <div class="auth-link">
+                    <p>Already have an account? <a href="#" onclick="closeStudentRegistrationModal(); showSection('login'); showAuthTab('student');">Login here</a></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts - Load auth.js first to ensure AuthManager is available -->
+    <script src="/js/auth.js"></script>
+    <script src="/js/app.js"></script>
+    <script src="/js/search.js"></script>
+    <script src="/js/clientRegistration.js"></script>
+    <script src="/js/studentRegistration.js"></script>
+    
+    <!-- Temporary debug script -->
+    <script>
+    window.addEventListener('load', function() {
+        console.log('Page loaded, checking app initialization...');
+        console.log('window.app:', window.app);
+        console.log('window.authManager:', window.authManager);
+        
+        // Add manual dashboard test function
+        window.testClientDashboard = function() {
+            console.log('Manual test function called');
+            if (window.app && window.app.showClientDashboard) {
+                window.app.showClientDashboard();
+            } else {
+                console.error('App or showClientDashboard not available');
+            }
+        };
+        
+        // Add manual create project test function
+        window.testCreateProject = function() {
+            console.log('Manual testCreateProject called');
+            if (window.app && window.app.showCreateProjectModal) {
+                window.app.showCreateProjectModal();
+            } else {
+                console.error('App or showCreateProjectModal not available');
+            }
+        };
+        
+        // Test if user is already authenticated
+        setTimeout(function() {
+            console.log('Delayed check - currentUser:', window.app?.currentUser);
+            console.log('Delayed check - authManager user:', window.authManager?.user);
+        }, 1000);
+        
+        // Add global error handler
+        window.addEventListener('error', function(e) {
+            console.error('Global error:', e.error, e.filename, e.lineno);
+        });
+    });
+    </script>
+</body>
+</html>

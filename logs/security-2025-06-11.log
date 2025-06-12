@@ -1,0 +1,1 @@
+{"timestamp":"2025-06-11T09:06:08.946Z","level":"ERROR","category":"SECURITY","message":"Multiple failed login attempts detected","eventType":"brute_force_attempt","severity":"high","ipAddress":"127.0.0.1","userAgent":"Test-Agent","url":"/api/auth/login","method":"POST","attemptCount":5,"timeWindow":"15 minutes","environment":"development","nodeVersion":"v22.15.0","pid":389066}
