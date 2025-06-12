@@ -59,7 +59,7 @@ A comprehensive project management system designed to connect students with real
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/capstone-connect.git
+   git clone https://github.com/michael-borck/capstone-connect.git
    cd capstone-connect
    ```
 
