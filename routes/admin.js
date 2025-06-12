@@ -6,6 +6,9 @@ const { authenticate, authorize, auditAuth } = require('../middleware/auth');
 const { validationRules } = require('../middleware/validation');
 const { logger } = require('../utils/logger');
 
+// Import sub-routers
+const usersRouter = require('./admin/users');
+
 // Get system health and statistics
 router.get('/health', authenticate, authorize('admin'), async (req, res) => {
     try {
@@ -762,5 +765,8 @@ router.post('/projects/bulk-reject', authenticate, authorize('admin'), async (re
         });
     }
 });
+
+// Mount sub-routers
+router.use('/users', usersRouter);
 
 module.exports = router;

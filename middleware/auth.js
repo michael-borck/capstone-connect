@@ -146,6 +146,14 @@ async function validateUser(req, res, next) {
             });
         }
 
+        // Check if user is archived
+        if (user.is_archived) {
+            return res.status(401).json({ 
+                error: 'This account has been archived. Please contact support.',
+                code: 'USER_ARCHIVED'
+            });
+        }
+
         // Add full user data to request
         req.userInfo = user;
         next();

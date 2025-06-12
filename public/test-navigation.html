@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Navigation Test - Capstone Connect</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        .test-result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        button {
+            margin: 5px;
+            padding: 8px 16px;
+            cursor: pointer;
+        }
+        pre {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Capstone Connect - Navigation Test Suite</h1>
+    
+    <div class="test-section">
+        <h2>1. Global Function Availability Test</h2>
+        <button onclick="testGlobalFunctions()">Run Test</button>
+        <div id="globalFunctionResults"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>2. Navigation Function Test</h2>
+        <button onclick="testNavigation()">Test All Navigation</button>
+        <div id="navigationResults"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>3. Pattern Consistency Check</h2>
+        <button onclick="checkPatternConsistency()">Check HTML Patterns</button>
+        <div id="patternResults"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>4. Console Error Monitor</h2>
+        <button onclick="clearConsoleMonitor()">Clear</button>
+        <div id="consoleErrors" style="max-height: 200px; overflow-y: auto;">
+            <em>Console errors will appear here...</em>
+        </div>
+    </div>
+
+    <script>
+        // Override console.error to capture errors
+        const originalError = console.error;
+        const consoleErrors = [];
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            const errorMsg = args.map(arg => 
+                typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+            ).join(' ');
+            
+            consoleErrors.push({
+                time: new Date().toLocaleTimeString(),
+                message: errorMsg
+            });
+            updateConsoleDisplay();
+        };
+
+        function updateConsoleDisplay() {
+            const display = document.getElementById('consoleErrors');
+            if (consoleErrors.length === 0) {
+                display.innerHTML = '<em>No console errors detected</em>';
+            } else {
+                display.innerHTML = consoleErrors.map(err => 
+                    `<div class="test-result error">
+                        <strong>${err.time}:</strong> ${err.message}
+                    </div>`
+                ).join('');
+            }
+        }
+
+        function clearConsoleMonitor() {
+            consoleErrors.length = 0;
+            updateConsoleDisplay();
+        }
+
+        function testGlobalFunctions() {
+            const results = document.getElementById('globalFunctionResults');
+            results.innerHTML = '';
+            
+            const functionsToTest = [
+                'showSection',
+                'showClientRegistration',
+                'showStudentRegistration',
+                'showAdminLogin',
+                'showCreateProject',
+                'closeModal',
+                'showProjectDetail',
+                'toggleFavorite',
+                'expressInterest',
+                'showAuthTab',
+                'approveProject',
+                'rejectProject',
+                'showAdminTab',
+                'bulkApproveProjects',
+                'bulkRejectProjects',
+                'clearPendingSelection',
+                'bulkArchiveUsers',
+                'bulkRestoreUsers',
+                'bulkDeleteUsers',
+                'clearUserSelection',
+                'bulkApproveGalleryItems',
+                'bulkRejectGalleryItems',
+                'bulkDeleteGalleryItems',
+                'clearGallerySelection',
+                'showAddToGalleryModal'
+            ];
+            
+            let passed = 0;
+            let failed = 0;
+            
+            functionsToTest.forEach(funcName => {
+                const exists = typeof window[funcName] === 'function';
+                results.innerHTML += `
+                    <div class="test-result ${exists ? 'success' : 'error'}">
+                        ${exists ? '✓' : '✗'} window.${funcName}: ${exists ? 'Available' : 'NOT FOUND'}
+                    </div>
+                `;
+                if (exists) passed++; else failed++;
+            });
+            
+            results.innerHTML = `
+                <h3>Summary: ${passed} passed, ${failed} failed</h3>
+                ${results.innerHTML}
+            `;
+        }
+
+        function testNavigation() {
+            const results = document.getElementById('navigationResults');
+            results.innerHTML = '<p>Testing navigation functions...</p>';
+            
+            const sections = ['home', 'projects', 'gallery', 'login', 'studentDashboard', 'admin', 'clientDashboard'];
+            const testResults = [];
+            
+            sections.forEach(section => {
+                try {
+                    if (typeof window.showSection === 'function') {
+                        // We can't actually test navigation without the full app loaded
+                        // but we can verify the function exists and is callable
+                        testResults.push({
+                            section: section,
+                            status: 'function exists',
+                            success: true
+                        });
+                    } else {
+                        testResults.push({
+                            section: section,
+                            status: 'showSection not found',
+                            success: false
+                        });
+                    }
+                } catch (error) {
+                    testResults.push({
+                        section: section,
+                        status: error.message,
+                        success: false
+                    });
+                }
+            });
+            
+            results.innerHTML = testResults.map(result => `
+                <div class="test-result ${result.success ? 'success' : 'error'}">
+                    ${result.success ? '✓' : '✗'} Navigate to "${result.section}": ${result.status}
+                </div>
+            `).join('');
+        }
+
+        async function checkPatternConsistency() {
+            const results = document.getElementById('patternResults');
+            results.innerHTML = '<p>Checking onclick patterns in index.html...</p>';
+            
+            try {
+                // Fetch the index.html content
+                const response = await fetch('/index.html');
+                const html = await response.text();
+                
+                // Find all onclick attributes
+                const onclickPattern = /onclick="([^"]+)"/g;
+                const matches = [...html.matchAll(onclickPattern)];
+                
+                const patterns = {
+                    good: [],
+                    windowCapstoneApp: [],
+                    windowApp: [],
+                    other: []
+                };
+                
+                matches.forEach(match => {
+                    const onclick = match[1];
+                    if (onclick.includes('window.capstoneApp.')) {
+                        patterns.windowCapstoneApp.push(onclick);
+                    } else if (onclick.includes('window.app.')) {
+                        patterns.windowApp.push(onclick);
+                    } else if (onclick.match(/^[a-zA-Z_]\w*\(/)) {
+                        patterns.good.push(onclick);
+                    } else {
+                        patterns.other.push(onclick);
+                    }
+                });
+                
+                results.innerHTML = `
+                    <h3>Pattern Analysis</h3>
+                    <div class="test-result ${patterns.good.length > 0 ? 'success' : 'error'}">
+                        <strong>✓ Direct function calls (Recommended):</strong> ${patterns.good.length} found
+                        ${patterns.good.length > 0 ? '<pre>' + patterns.good.slice(0, 5).join('\n') + (patterns.good.length > 5 ? '\n...' : '') + '</pre>' : ''}
+                    </div>
+                    <div class="test-result ${patterns.windowCapstoneApp.length === 0 ? 'success' : 'error'}">
+                        <strong>${patterns.windowCapstoneApp.length === 0 ? '✓' : '✗'} window.capstoneApp. pattern:</strong> ${patterns.windowCapstoneApp.length} found
+                        ${patterns.windowCapstoneApp.length > 0 ? '<pre>' + patterns.windowCapstoneApp.join('\n') + '</pre>' : ''}
+                    </div>
+                    <div class="test-result ${patterns.windowApp.length === 0 ? 'success' : 'error'}">
+                        <strong>${patterns.windowApp.length === 0 ? '✓' : '✗'} window.app. pattern:</strong> ${patterns.windowApp.length} found
+                        ${patterns.windowApp.length > 0 ? '<pre>' + patterns.windowApp.join('\n') + '</pre>' : ''}
+                    </div>
+                    ${patterns.other.length > 0 ? `
+                        <div class="test-result error">
+                            <strong>⚠ Other patterns:</strong> ${patterns.other.length} found
+                            <pre>${patterns.other.join('\n')}</pre>
+                        </div>
+                    ` : ''}
+                `;
+                
+            } catch (error) {
+                results.innerHTML = `
+                    <div class="test-result error">
+                        Error checking patterns: ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        // Run initial test on page load
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                testGlobalFunctions();
+            }, 1000); // Wait for app to initialize
+        });
+    </script>
+</body>
+</html>

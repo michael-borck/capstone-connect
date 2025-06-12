@@ -207,6 +207,7 @@
                             <button class="admin-tab" data-tab="stats">Statistics</button>
                             <button class="admin-tab" data-tab="all">All Projects</button>
                             <button class="admin-tab" data-tab="users">User Management</button>
+                            <button class="admin-tab" data-tab="gallery">Gallery Management</button>
                         </div>
                         
                         <div class="admin-content">
@@ -234,13 +235,13 @@
                                 <!-- Bulk Actions for Pending Projects -->
                                 <div id="pendingBulkActions" class="admin-bulk-actions" style="display: none;">
                                     <span class="bulk-selected-count" id="pendingSelectedCount">0 projects selected</span>
-                                    <button class="btn btn-primary btn-sm" onclick="window.capstoneApp.bulkApproveProjects()">
+                                    <button class="btn btn-primary btn-sm" onclick="bulkApproveProjects()">
                                         Bulk Approve
                                     </button>
-                                    <button class="btn btn-secondary btn-sm" onclick="window.capstoneApp.bulkRejectProjects()">
+                                    <button class="btn btn-secondary btn-sm" onclick="bulkRejectProjects()">
                                         Bulk Reject
                                     </button>
-                                    <button class="btn btn-outline btn-sm" onclick="window.capstoneApp.clearPendingSelection()">
+                                    <button class="btn btn-outline btn-sm" onclick="clearPendingSelection()">
                                         Clear Selection
                                     </button>
                                 </div>
@@ -323,11 +324,95 @@
                                                 <option value="admin">Admins</option>
                                             </select>
                                         </div>
+                                        <div class="admin-filter-group">
+                                            <label class="admin-filter-label">Status:</label>
+                                            <select id="usersStatus" class="admin-select">
+                                                <option value="">All Users</option>
+                                                <option value="active">Active</option>
+                                                <option value="archived">Archived</option>
+                                            </select>
+                                        </div>
                                     </div>
+                                </div>
+                                
+                                <!-- Bulk Actions for Users -->
+                                <div id="userBulkActions" class="admin-bulk-actions" style="display: none;">
+                                    <span class="bulk-selected-count" id="userSelectedCount">0 users selected</span>
+                                    <button class="btn btn-warning btn-sm" onclick="bulkArchiveUsers()">
+                                        Archive Selected
+                                    </button>
+                                    <button class="btn btn-success btn-sm" onclick="bulkRestoreUsers()">
+                                        Restore Selected
+                                    </button>
+                                    <button class="btn btn-danger btn-sm" onclick="bulkDeleteUsers()">
+                                        Delete Selected
+                                    </button>
+                                    <button class="btn btn-outline btn-sm" onclick="clearUserSelection()">
+                                        Clear Selection
+                                    </button>
                                 </div>
                                 
                                 <div id="usersList" class="admin-users-grid">
                                     <div class="loading">Loading users...</div>
+                                </div>
+                            </div>
+                            
+                            <!-- Gallery Management Tab -->
+                            <div id="galleryPanel" class="admin-panel">
+                                <div class="admin-panel-header">
+                                    <h3>Gallery Management</h3>
+                                    <div class="admin-filters">
+                                        <div class="admin-filter-group">
+                                            <label class="admin-filter-label">Search:</label>
+                                            <input type="text" id="gallerySearch" class="admin-search" placeholder="Search by title, year, or category...">
+                                        </div>
+                                        <div class="admin-filter-group">
+                                            <label class="admin-filter-label">Status:</label>
+                                            <select id="galleryStatusFilter" class="admin-select">
+                                                <option value="">All Status</option>
+                                                <option value="approved">Approved</option>
+                                                <option value="pending">Pending</option>
+                                                <option value="rejected">Rejected</option>
+                                            </select>
+                                        </div>
+                                        <div class="admin-filter-group">
+                                            <label class="admin-filter-label">Year:</label>
+                                            <select id="galleryYearFilter" class="admin-select">
+                                                <option value="">All Years</option>
+                                            </select>
+                                        </div>
+                                        <div class="admin-filter-group">
+                                            <button class="btn btn-primary" onclick="showAddToGalleryModal()">
+                                                Add from Completed Project
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Gallery Stats -->
+                                <div id="galleryStats" class="admin-stats-grid" style="margin-bottom: 2rem;">
+                                    <div class="loading">Loading gallery statistics...</div>
+                                </div>
+                                
+                                <!-- Bulk Actions for Gallery -->
+                                <div id="galleryBulkActions" class="admin-bulk-actions" style="display: none;">
+                                    <span class="bulk-selected-count" id="gallerySelectedCount">0 items selected</span>
+                                    <button class="btn btn-success btn-sm" onclick="bulkApproveGalleryItems()">
+                                        Bulk Approve
+                                    </button>
+                                    <button class="btn btn-danger btn-sm" onclick="bulkRejectGalleryItems()">
+                                        Bulk Reject
+                                    </button>
+                                    <button class="btn btn-warning btn-sm" onclick="bulkDeleteGalleryItems()">
+                                        Bulk Delete
+                                    </button>
+                                    <button class="btn btn-outline btn-sm" onclick="clearGallerySelection()">
+                                        Clear Selection
+                                    </button>
+                                </div>
+                                
+                                <div id="galleryItemsList" class="gallery-grid">
+                                    <div class="loading">Loading gallery items...</div>
                                 </div>
                             </div>
                         </div>

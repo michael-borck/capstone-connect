@@ -3109,6 +3109,27 @@ class CapstoneApp {
     showInfoToast(title, message, duration) {
         return this.showToast('info', title, message, duration);
     }
+
+    // Gallery Management Methods (stubs for now)
+    bulkApproveGalleryItems() {
+        this.showToast('success', 'Gallery bulk approve feature coming soon!');
+    }
+
+    bulkRejectGalleryItems() {
+        this.showToast('info', 'Gallery bulk reject feature coming soon!');
+    }
+
+    bulkDeleteGalleryItems() {
+        this.showToast('warning', 'Gallery bulk delete feature coming soon!');
+    }
+
+    clearGallerySelection() {
+        this.showToast('info', 'Gallery selection cleared');
+    }
+
+    showAddToGalleryModal() {
+        this.showToast('info', 'Add to Gallery feature coming soon!', 'Complete projects first, then they can be added to the gallery.');
+    }
 }
 
 // Global functions for onclick handlers
@@ -3197,6 +3218,36 @@ const app = new CapstoneApp();
 
 // Make app globally available
 window.capstoneApp = app;
+window.app = app; // Also make it available as window.app for compatibility
+
+// Expose necessary functions globally for inline onclick handlers
+window.showSection = (section) => app.showSection(section);
+window.showClientRegistration = () => app.showClientRegistration();
+window.showStudentRegistration = () => app.showStudentRegistration();
+window.showAdminLogin = () => app.showAdminLogin();
+window.showCreateProject = () => app.showCreateProjectModal();
+window.closeModal = () => app.closeModal();
+window.showProjectDetail = (projectId) => app.showProjectDetail(projectId);
+window.toggleFavorite = (projectId, event) => app.toggleFavorite(projectId, event);
+window.expressInterest = (projectId, event) => app.expressInterest(projectId, event);
+window.showAuthTab = (tab) => app.showAuthTab(tab);
+window.approveProject = (projectId) => app.approveProject(projectId);
+window.rejectProject = (projectId) => app.rejectProject(projectId);
+window.showAdminTab = (tab) => app.showAdminTab(tab);
+
+// Admin bulk operations
+window.bulkApproveProjects = () => app.bulkApproveProjects();
+window.bulkRejectProjects = () => app.bulkRejectProjects();
+window.clearPendingSelection = () => app.clearPendingSelection();
+window.bulkArchiveUsers = () => app.bulkArchiveUsers();
+window.bulkRestoreUsers = () => app.bulkRestoreUsers();
+window.bulkDeleteUsers = () => app.bulkDeleteUsers();
+window.clearUserSelection = () => app.clearUserSelection();
+window.bulkApproveGalleryItems = () => app.bulkApproveGalleryItems();
+window.bulkRejectGalleryItems = () => app.bulkRejectGalleryItems();
+window.bulkDeleteGalleryItems = () => app.bulkDeleteGalleryItems();
+window.clearGallerySelection = () => app.clearGallerySelection();
+window.showAddToGalleryModal = () => app.showAddToGalleryModal();
 
 // Listen for postMessage events for cross-script communication
 window.addEventListener('message', function(event) {

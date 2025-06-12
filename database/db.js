@@ -160,7 +160,7 @@ class Database {
     }
 
     async getAdminByEmail(email) {
-        const sql = `SELECT * FROM admin_users WHERE email = ?`;
+        const sql = `SELECT * FROM admin_users WHERE email = ? AND is_archived = 0`;
         return this.get(sql, [email]);
     }
 
@@ -182,7 +182,7 @@ class Database {
     }
 
     async getClientByEmail(email) {
-        const sql = `SELECT * FROM clients WHERE email = ?`;
+        const sql = `SELECT * FROM clients WHERE email = ? AND is_archived = 0`;
         return this.get(sql, [email]);
     }
 
@@ -203,7 +203,7 @@ class Database {
     }
 
     async getStudentByEmail(email) {
-        const sql = `SELECT * FROM students WHERE email = ?`;
+        const sql = `SELECT * FROM students WHERE email = ? AND is_archived = 0`;
         return this.get(sql, [email]);
     }
 
@@ -255,6 +255,69 @@ class Database {
         return this.query(sql);
     }
 
+    async getCompletedProjects() {
+        const sql = `SELECT p.*, c.organization_name, c.contact_name 
+                     FROM projects p 
+                     JOIN clients c ON p.client_id = c.id 
+                     WHERE p.status = 'completed' 
+                     ORDER BY p.completed_at DESC`;
+        return this.query(sql);
+    }
+
+    // Multi-phase project support
+    async createProjectPhase(clientId, parentProjectId, phaseNumber, title, description, requiredSkills, tools, deliverables, semesterAvailability = 'both', projectType = null, durationWeeks = null, maxStudents = null, prerequisites = null, additionalInfo = null) {
+        const sql = `INSERT INTO projects (
+                     client_id, parent_project_id, phase_number, title, description, required_skills, 
+                     tools_technologies, deliverables, semester_availability, project_type, 
+                     duration_weeks, max_students, prerequisites, additional_info
+                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+        return this.run(sql, [
+            clientId, parentProjectId, phaseNumber, title, description, requiredSkills, 
+            tools, deliverables, semesterAvailability, projectType, durationWeeks, 
+            maxStudents, prerequisites, additionalInfo
+        ]);
+    }
+
+    async getProjectPhases(parentProjectId) {
+        const sql = `SELECT p.*, c.organization_name, c.contact_name 
+                     FROM projects p 
+                     JOIN clients c ON p.client_id = c.id 
+                     WHERE p.parent_project_id = ? 
+                     ORDER BY p.phase_number ASC`;
+        return this.query(sql, [parentProjectId]);
+    }
+
+    async getProjectFamily(projectId) {
+        // Get the root project (either this project if it's a parent, or its parent)
+        const sql1 = `SELECT p.*, c.organization_name, c.contact_name 
+                      FROM projects p 
+                      JOIN clients c ON p.client_id = c.id 
+                      WHERE p.id = ?`;
+        const currentProject = await this.get(sql1, [projectId]);
+        
+        if (!currentProject) return null;
+        
+        const rootProjectId = currentProject.parent_project_id || projectId;
+        
+        // Get the root project
+        const rootProject = await this.get(sql1, [rootProjectId]);
+        
+        // Get all phases
+        const phases = await this.getProjectPhases(rootProjectId);
+        
+        return {
+            rootProject,
+            phases,
+            currentPhase: currentProject.parent_project_id ? currentProject : null
+        };
+    }
+
+    async getNextPhaseNumber(parentProjectId) {
+        const sql = `SELECT MAX(phase_number) as max_phase FROM projects WHERE parent_project_id = ?`;
+        const result = await this.get(sql, [parentProjectId]);
+        return (result.max_phase || 0) + 1;
+    }
+
     async updateProjectStatus(projectId, status, approvedBy = null) {
         let sql, params;
         if (status === 'approved' && approvedBy) {
@@ -265,6 +328,17 @@ class Database {
             params = [status, projectId];
         }
         return this.run(sql, params);
+    }
+
+    async completeProject(projectId, completedBy, clientSnapshot = null, organizationSnapshot = null) {
+        const sql = `UPDATE projects SET 
+                     status = 'completed', 
+                     completed_at = CURRENT_TIMESTAMP,
+                     completed_by = ?,
+                     client_name_snapshot = ?,
+                     client_org_snapshot = ?
+                     WHERE id = ?`;
+        return this.run(sql, [completedBy, clientSnapshot, organizationSnapshot, projectId]);
     }
 
     async updateProject(projectId, title, description, requiredSkills, tools, deliverables, semesterAvailability) {
@@ -420,6 +494,127 @@ class Database {
             // If error logging fails, just log to console
             console.error('Failed to log error to database:', error);
         }
+    }
+
+    // Gallery management
+    async createGalleryItem(title, description, year, category, imageUrls, clientName, teamMembers, outcomes, submittedBy) {
+        const sql = `INSERT INTO project_gallery 
+                     (title, description, year, category, image_urls, client_name, team_members, outcomes, submitted_by) 
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+        return this.run(sql, [
+            title, description, year, category, 
+            JSON.stringify(imageUrls || []), 
+            clientName, teamMembers, outcomes, submittedBy
+        ]);
+    }
+
+    async addProjectToGallery(projectId, submittedBy, additionalInfo = {}) {
+        // Get the completed project data
+        const project = await this.getProjectById(projectId);
+        if (!project) {
+            throw new Error('Project not found');
+        }
+
+        // Extract year from completion date or creation date
+        const year = new Date(project.completed_at || project.created_at).getFullYear();
+        
+        // Use snapshot data if available, otherwise current data
+        const clientName = project.client_name_snapshot || project.contact_name;
+        const organizationName = project.client_org_snapshot || project.organization_name;
+        
+        const galleryData = {
+            title: additionalInfo.galleryTitle || project.title,
+            description: additionalInfo.galleryDescription || project.description,
+            year: year,
+            category: additionalInfo.category || project.project_type || 'Software',
+            image_urls: additionalInfo.imageUrls || [],
+            client_name: `${clientName} (${organizationName})`,
+            team_members: additionalInfo.teamMembers || '',
+            outcomes: additionalInfo.outcomes || project.deliverables,
+            submitted_by: submittedBy
+        };
+
+        return this.createGalleryItem(
+            galleryData.title,
+            galleryData.description,
+            galleryData.year,
+            galleryData.category,
+            galleryData.image_urls,
+            galleryData.client_name,
+            galleryData.team_members,
+            galleryData.outcomes,
+            galleryData.submitted_by
+        );
+    }
+
+    async getGalleryItems(status = 'approved') {
+        const sql = `SELECT * FROM project_gallery WHERE status = ? ORDER BY year DESC, created_at DESC`;
+        return this.query(sql, [status]);
+    }
+
+    async getPendingGalleryItems() {
+        const sql = `SELECT pg.*, au.full_name as submitted_by_name 
+                     FROM project_gallery pg 
+                     LEFT JOIN admin_users au ON pg.submitted_by = au.id 
+                     WHERE pg.status = 'pending' 
+                     ORDER BY pg.created_at ASC`;
+        return this.query(sql);
+    }
+
+    async updateGalleryItemStatus(galleryId, status, approvedBy = null) {
+        let sql, params;
+        if (status === 'approved' && approvedBy) {
+            sql = `UPDATE project_gallery SET status = ?, approved_by = ?, approved_at = CURRENT_TIMESTAMP WHERE id = ?`;
+            params = [status, approvedBy, galleryId];
+        } else {
+            sql = `UPDATE project_gallery SET status = ? WHERE id = ?`;
+            params = [status, galleryId];
+        }
+        return this.run(sql, params);
+    }
+
+    async deleteGalleryItem(galleryId) {
+        const sql = `DELETE FROM project_gallery WHERE id = ?`;
+        return this.run(sql, [galleryId]);
+    }
+
+    async getGalleryItemById(galleryId) {
+        const sql = `SELECT pg.*, au.full_name as submitted_by_name, 
+                            au2.full_name as approved_by_name
+                     FROM project_gallery pg 
+                     LEFT JOIN admin_users au ON pg.submitted_by = au.id 
+                     LEFT JOIN admin_users au2 ON pg.approved_by = au2.id 
+                     WHERE pg.id = ?`;
+        return this.get(sql, [galleryId]);
+    }
+
+    async updateGalleryItem(galleryId, title, description, year, category, imageUrls, clientName, teamMembers, outcomes) {
+        const sql = `UPDATE project_gallery SET 
+                     title = ?, description = ?, year = ?, category = ?, 
+                     image_urls = ?, client_name = ?, team_members = ?, outcomes = ?,
+                     updated_at = CURRENT_TIMESTAMP 
+                     WHERE id = ?`;
+        return this.run(sql, [
+            title, description, year, category,
+            JSON.stringify(imageUrls || []),
+            clientName, teamMembers, outcomes, galleryId
+        ]);
+    }
+
+    async getGalleryStats() {
+        const stats = await Promise.all([
+            this.query('SELECT COUNT(*) as total FROM project_gallery WHERE status = "approved"'),
+            this.query('SELECT COUNT(*) as pending FROM project_gallery WHERE status = "pending"'),
+            this.query('SELECT COUNT(DISTINCT year) as years FROM project_gallery WHERE status = "approved"'),
+            this.query('SELECT COUNT(DISTINCT category) as categories FROM project_gallery WHERE status = "approved"')
+        ]);
+
+        return {
+            total: stats[0][0].total,
+            pending: stats[1][0].pending,
+            years: stats[2][0].years,
+            categories: stats[3][0].categories
+        };
     }
 }
 

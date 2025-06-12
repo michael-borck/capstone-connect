@@ -346,6 +346,315 @@ router.patch('/:id/status', authenticate, authorize('admin'), validationRules.ap
     }
 });
 
+// Complete project with data snapshot (admin only)
+router.patch('/:id/complete', authenticate, authorize('admin'), validationRules.validateId, async (req, res) => {
+    try {
+        const projectId = parseInt(req.params.id);
+        const { completionNotes, preserveClientData = true } = req.body;
+        
+        // Get existing project with client data
+        const project = await database.getProjectById(projectId);
+        if (!project) {
+            return res.status(404).json({ 
+                error: 'Project not found',
+                code: 'PROJECT_NOT_FOUND'
+            });
+        }
+        
+        // Can only complete approved or active projects
+        if (!['approved', 'active'].includes(project.status)) {
+            return res.status(400).json({ 
+                error: 'Can only complete approved or active projects',
+                code: 'PROJECT_COMPLETION_INVALID_STATUS'
+            });
+        }
+        
+        let clientSnapshot = null;
+        let organizationSnapshot = null;
+        
+        if (preserveClientData) {
+            // Get current client data for snapshot
+            const client = await database.getClientById(project.client_id);
+            if (client) {
+                clientSnapshot = client.contact_name;
+                organizationSnapshot = client.organization_name;
+            }
+        }
+        
+        // Complete the project with snapshots
+        await database.completeProject(
+            projectId, 
+            req.user.id, 
+            clientSnapshot, 
+            organizationSnapshot
+        );
+        
+        // Add completion notes if provided
+        if (completionNotes) {
+            await database.logAudit(
+                req.user.type,
+                req.user.id,
+                'project_completion_notes',
+                'project',
+                projectId,
+                null,
+                completionNotes,
+                req.ip
+            );
+        }
+        
+        // Get updated project
+        const updatedProject = await database.getProjectById(projectId);
+        
+        // Log audit trail
+        await database.logAudit(
+            req.user.type,
+            req.user.id,
+            'project_completed',
+            'project',
+            projectId,
+            project.status,
+            'completed',
+            req.ip
+        );
+        
+        // Log analytics
+        await database.logAnalytics(
+            'project_completed',
+            req.user.type,
+            req.user.id,
+            projectId,
+            null,
+            'completion_type',
+            preserveClientData ? 'with_snapshot' : 'without_snapshot'
+        );
+        
+        res.json({
+            message: 'Project completed successfully',
+            project: updatedProject,
+            preservedData: preserveClientData ? {
+                clientName: clientSnapshot,
+                organizationName: organizationSnapshot
+            } : null,
+            completionNotes
+        });
+        
+    } catch (error) {
+        console.error('Error completing project:', error);
+        res.status(500).json({ 
+            error: 'Internal server error',
+            code: 'PROJECT_COMPLETION_ERROR'
+        });
+    }
+});
+
+// Create a new phase for an existing project (admin or client)
+router.post('/:id/phases', authenticate, async (req, res) => {
+    try {
+        const parentProjectId = parseInt(req.params.id);
+        const {
+            title, description, required_skills, tools_technologies,
+            deliverables, semester_availability, project_type,
+            duration_weeks, max_students, prerequisites, additional_info
+        } = req.body;
+        
+        // Get parent project to verify ownership/permissions
+        const parentProject = await database.getProjectById(parentProjectId);
+        if (!parentProject) {
+            return res.status(404).json({ 
+                error: 'Parent project not found',
+                code: 'PARENT_PROJECT_NOT_FOUND'
+            });
+        }
+        
+        // Check permissions - admin can create phases for any project, clients only for their own
+        if (req.user.type === 'client' && req.user.id !== parentProject.client_id) {
+            return res.status(403).json({ 
+                error: 'Access denied. You can only create phases for your own projects.',
+                code: 'PHASE_ACCESS_DENIED'
+            });
+        }
+        
+        // Only allow phase creation for approved or completed projects
+        if (!['approved', 'active', 'completed'].includes(parentProject.status)) {
+            return res.status(400).json({ 
+                error: 'Can only create phases for approved, active, or completed projects',
+                code: 'PHASE_INVALID_PARENT_STATUS'
+            });
+        }
+        
+        // Get next phase number
+        const phaseNumber = await database.getNextPhaseNumber(parentProjectId);
+        
+        // Create the new phase
+        const result = await database.createProjectPhase(
+            parentProject.client_id,
+            parentProjectId,
+            phaseNumber,
+            title,
+            description,
+            required_skills,
+            tools_technologies,
+            deliverables,
+            semester_availability,
+            project_type,
+            duration_weeks,
+            max_students,
+            prerequisites,
+            additional_info
+        );
+        
+        // Get the created phase
+        const newPhase = await database.getProjectById(result.id);
+        
+        // Log audit trail
+        await database.logAudit(
+            req.user.type,
+            req.user.id,
+            'project_phase_created',
+            'project',
+            result.id,
+            null,
+            JSON.stringify({ parentProjectId, phaseNumber }),
+            req.ip
+        );
+        
+        // Log analytics
+        await database.logAnalytics(
+            'project_phase_created',
+            req.user.type,
+            req.user.id,
+            result.id,
+            null,
+            'parent_project_id',
+            parentProjectId.toString()
+        );
+        
+        res.status(201).json({
+            message: `Phase ${phaseNumber} created successfully`,
+            phase: newPhase,
+            parentProject: {
+                id: parentProject.id,
+                title: parentProject.title
+            }
+        });
+        
+    } catch (error) {
+        console.error('Error creating project phase:', error);
+        res.status(500).json({ 
+            error: 'Internal server error',
+            code: 'PROJECT_PHASE_CREATION_ERROR'
+        });
+    }
+});
+
+// Get all phases for a project
+router.get('/:id/phases', optionalAuth, async (req, res) => {
+    try {
+        const projectId = parseInt(req.params.id);
+        
+        // Get project family (root project and all phases)
+        const projectFamily = await database.getProjectFamily(projectId);
+        
+        if (!projectFamily) {
+            return res.status(404).json({ 
+                error: 'Project not found',
+                code: 'PROJECT_NOT_FOUND'
+            });
+        }
+        
+        // Log analytics
+        if (req.user) {
+            await database.logAnalytics(
+                'project_phases_viewed',
+                req.user.type,
+                req.user.id,
+                projectId,
+                null,
+                null,
+                null
+            );
+        }
+        
+        res.json({
+            rootProject: projectFamily.rootProject,
+            phases: projectFamily.phases,
+            currentPhase: projectFamily.currentPhase,
+            totalPhases: projectFamily.phases.length
+        });
+        
+    } catch (error) {
+        console.error('Error fetching project phases:', error);
+        res.status(500).json({ 
+            error: 'Internal server error',
+            code: 'PROJECT_PHASES_FETCH_ERROR'
+        });
+    }
+});
+
+// Get project with phase information
+router.get('/:id/with-phases', optionalAuth, async (req, res) => {
+    try {
+        const projectId = parseInt(req.params.id);
+        
+        // Get the main project
+        const project = await database.getProjectById(projectId);
+        if (!project) {
+            return res.status(404).json({ 
+                error: 'Project not found',
+                code: 'PROJECT_NOT_FOUND'
+            });
+        }
+        
+        // Get project family information
+        const projectFamily = await database.getProjectFamily(projectId);
+        
+        // Get interest count for this specific project
+        const interests = await database.getProjectInterests(projectId);
+        
+        // Check if user has expressed interest (if authenticated)
+        let hasExpressedInterest = false;
+        let isFavorite = false;
+        
+        if (req.user && req.user.type === 'student') {
+            const userInterests = await database.getStudentInterests(req.user.id);
+            hasExpressedInterest = userInterests.some(interest => interest.project_id === projectId);
+            isFavorite = await database.isFavorite(req.user.id, projectId);
+        }
+        
+        // Log analytics
+        if (req.user) {
+            await database.logAnalytics(
+                'project_viewed_with_phases',
+                req.user.type,
+                req.user.id,
+                projectId,
+                null,
+                null,
+                null
+            );
+        }
+        
+        res.json({
+            project: {
+                ...project,
+                interest_count: interests.length,
+                hasExpressedInterest,
+                isFavorite
+            },
+            projectFamily,
+            interests: req.user && req.user.type === 'admin' ? interests : null
+        });
+        
+    } catch (error) {
+        console.error('Error fetching project with phases:', error);
+        res.status(500).json({ 
+            error: 'Internal server error',
+            code: 'PROJECT_WITH_PHASES_FETCH_ERROR'
+        });
+    }
+});
+
 // Toggle project active/inactive status (admin only)
 router.patch('/:id/toggle', authenticate, authorize('admin'), validationRules.validateId, async (req, res) => {
     try {

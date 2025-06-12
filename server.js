@@ -38,6 +38,7 @@ const projectRoutes = require('./routes/projects');
 const studentRoutes = require('./routes/students');
 const clientRoutes = require('./routes/clients');
 const adminRoutes = require('./routes/admin');
+const galleryRoutes = require('./routes/gallery');
 // const searchRoutes = require('./routes/search');
 // const analyticsRoutes = require('./routes/analytics');
 
@@ -144,6 +145,7 @@ app.use('/api/projects', projectRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/clients', clientRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/gallery', galleryRoutes);
 // app.use('/api/search', searchRoutes);
 // app.use('/api/analytics', analyticsRoutes);
 
