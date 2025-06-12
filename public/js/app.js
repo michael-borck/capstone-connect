@@ -334,6 +334,8 @@ class CapstoneApp {
             this.loadProjects();
         } else if (sectionId === 'gallery' && this.galleryItems.length === 0) {
             this.loadGallery();
+        } else if (sectionId === 'studentDashboard') {
+            this.loadStudentDashboard();
         }
     }
 
@@ -697,6 +699,10 @@ class CapstoneApp {
                 this.closeModal();
                 // Refresh project data
                 await this.loadProjects();
+                // If we're on the student dashboard, refresh it too
+                if (this.currentSection === 'studentDashboard') {
+                    await this.loadStudentDashboard();
+                }
             } else {
                 console.log(data.error || 'Failed to withdraw interest');
             }
@@ -784,6 +790,10 @@ class CapstoneApp {
                 // If modal is open, refresh project details
                 if (document.getElementById('modal').style.display === 'block') {
                     await this.showProjectDetails(projectId);
+                }
+                // If we're on the student dashboard, refresh it too
+                if (this.currentSection === 'studentDashboard') {
+                    await this.loadStudentDashboard();
                 }
             } else {
                 console.log(data.error || 'Failed to remove from favorites');
@@ -1522,6 +1532,224 @@ class CapstoneApp {
         `).join('');
     }
 
+    async showStudentDashboard() {
+        if (!this.currentUser || this.currentUser.type !== 'student') {
+            console.log('Student access required');
+            return;
+        }
+
+        this.showSection('studentDashboard');
+        await this.loadStudentDashboard();
+    }
+
+    async loadStudentDashboard() {
+        if (!this.currentUser || this.currentUser.type !== 'student') {
+            return;
+        }
+
+        try {
+            this.showLoading('studentStats');
+            this.showLoading('interestsList');
+            this.showLoading('favoritesList');
+            this.showLoading('profileInfo');
+            
+            const response = await fetch('/api/students/dashboard', {
+                headers: {
+                    'Authorization': `Bearer ${window.authManager.getToken()}`
+                },
+                credentials: 'include'
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            this.renderStudentDashboard(data);
+            this.setupDashboardTabs();
+            
+        } catch (error) {
+            console.error('Error loading student dashboard:', error);
+            this.showError('studentStats', 'Failed to load dashboard data.');
+        }
+    }
+
+    renderStudentDashboard(dashboardData) {
+        const { profile, interests, favorites, statistics } = dashboardData;
+        
+        // Update dashboard stats
+        const statsContainer = document.getElementById('studentStats');
+        if (statsContainer) {
+            statsContainer.innerHTML = `
+                <div class="stat-card">
+                    <h3>${interests.count}</h3>
+                    <p>Active Interests</p>
+                    <span class="stat-badge status-active">${interests.count}/${interests.maxAllowed}</span>
+                </div>
+                <div class="stat-card">
+                    <h3>${favorites.count}</h3>
+                    <p>Favorite Projects</p>
+                    <span class="stat-badge status-approved">${favorites.count}/${favorites.maxAllowed}</span>
+                </div>
+                <div class="stat-card">
+                    <h3>${statistics.totalProjects}</h3>
+                    <p>Available Projects</p>
+                    <span class="stat-badge status-pending">Browse</span>
+                </div>
+                <div class="stat-card">
+                    <h3>${statistics.totalInterests}</h3>
+                    <p>Total Student Interests</p>
+                    <span class="stat-badge status-active">System Wide</span>
+                </div>
+            `;
+        }
+
+        // Update interest count badge
+        const interestCountBadge = document.getElementById('interestCountBadge');
+        if (interestCountBadge) {
+            interestCountBadge.textContent = `${interests.count}/${interests.maxAllowed} interests`;
+        }
+
+        // Update favorites count badge
+        const favoritesCountBadge = document.getElementById('favoritesCountBadge');
+        if (favoritesCountBadge) {
+            favoritesCountBadge.textContent = `${favorites.count}/${favorites.maxAllowed} favorites`;
+        }
+
+        // Render interests list
+        this.renderInterestsList(interests.list);
+        
+        // Render favorites list
+        this.renderFavoritesList(favorites.list);
+        
+        // Render profile info
+        this.renderProfileInfo(profile);
+    }
+
+    renderInterestsList(interests) {
+        const container = document.getElementById('interestsList');
+        
+        if (!interests || interests.length === 0) {
+            container.innerHTML = `
+                <div class="dashboard-empty">
+                    <h4>No Project Interests Yet</h4>
+                    <p>Start exploring projects and express your interest in up to 5 projects.</p>
+                    <button class="btn btn-primary" onclick="window.capstoneApp.showSection('projects')">
+                        Browse Projects
+                    </button>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = interests.map(interest => `
+            <div class="dashboard-item" onclick="window.capstoneApp.showProjectDetails(${interest.project_id})">
+                <div class="dashboard-item-header">
+                    <h4 class="dashboard-item-title">${this.escapeHtml(interest.title)}</h4>
+                    <div class="dashboard-item-meta">
+                        <span>Expressed: ${new Date(interest.expressed_at).toLocaleDateString()}</span>
+                    </div>
+                </div>
+                <div class="dashboard-item-org">${this.escapeHtml(interest.organization_name)}</div>
+                <p class="dashboard-item-description">${this.truncateDescription(interest.description, 120)}</p>
+                ${interest.message && interest.message.trim() ? `<div class="dashboard-item-message"><strong>Your message:</strong> "${this.escapeHtml(interest.message)}"</div>` : ''}
+                <div class="dashboard-item-actions">
+                    <button class="btn-dashboard-action" onclick="event.stopPropagation(); window.capstoneApp.showProjectDetails(${interest.project_id})">
+                        View Details
+                    </button>
+                    <button class="btn-dashboard-action danger" onclick="event.stopPropagation(); window.capstoneApp.withdrawInterest(${interest.project_id})">
+                        Withdraw Interest
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    renderFavoritesList(favorites) {
+        const container = document.getElementById('favoritesList');
+        
+        if (!favorites || favorites.length === 0) {
+            container.innerHTML = `
+                <div class="dashboard-empty">
+                    <h4>No Favorite Projects Yet</h4>
+                    <p>Save interesting projects to your favorites for easy access later.</p>
+                    <button class="btn btn-primary" onclick="window.capstoneApp.showSection('projects')">
+                        Browse Projects
+                    </button>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = favorites.map(favorite => `
+            <div class="dashboard-item" onclick="window.capstoneApp.showProjectDetails(${favorite.project_id})">
+                <div class="dashboard-item-header">
+                    <h4 class="dashboard-item-title">${this.escapeHtml(favorite.title)}</h4>
+                    <div class="dashboard-item-meta">
+                        <span>Added: ${new Date(favorite.created_at).toLocaleDateString()}</span>
+                    </div>
+                </div>
+                <div class="dashboard-item-org">${this.escapeHtml(favorite.organization_name)}</div>
+                <p class="dashboard-item-description">${this.truncateDescription(favorite.description, 120)}</p>
+                <div class="dashboard-item-actions">
+                    <button class="btn-dashboard-action" onclick="event.stopPropagation(); window.capstoneApp.showProjectDetails(${favorite.project_id})">
+                        View Details
+                    </button>
+                    <button class="btn-dashboard-action danger" onclick="event.stopPropagation(); window.capstoneApp.removeFromFavorites(${favorite.project_id})">
+                        Remove from Favorites
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    renderProfileInfo(profile) {
+        const container = document.getElementById('profileInfo');
+        
+        container.innerHTML = `
+            <div class="profile-field">
+                <span class="profile-field-label">Full Name</span>
+                <span class="profile-field-value">${this.escapeHtml(profile.fullName)}</span>
+            </div>
+            <div class="profile-field">
+                <span class="profile-field-label">Email</span>
+                <span class="profile-field-value">${this.escapeHtml(profile.email)}</span>
+            </div>
+            ${profile.studentId ? `
+            <div class="profile-field">
+                <span class="profile-field-label">Student ID</span>
+                <span class="profile-field-value">${this.escapeHtml(profile.studentId)}</span>
+            </div>
+            ` : ''}
+            <div class="profile-field">
+                <span class="profile-field-label">Member Since</span>
+                <span class="profile-field-value">${new Date(profile.memberSince).toLocaleDateString()}</span>
+            </div>
+        `;
+    }
+
+    setupDashboardTabs() {
+        const tabButtons = document.querySelectorAll('.dashboard-tabs .tab-btn');
+        const tabPanels = document.querySelectorAll('.tab-panel');
+
+        tabButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const targetTab = button.getAttribute('data-tab');
+                
+                // Update button states
+                tabButtons.forEach(btn => btn.classList.remove('active'));
+                button.classList.add('active');
+                
+                // Update panel states
+                tabPanels.forEach(panel => panel.classList.remove('active'));
+                const targetPanel = document.getElementById(`${targetTab}Tab`);
+                if (targetPanel) {
+                    targetPanel.classList.add('active');
+                }
+            });
+        });
+    }
+
     async loadPendingProjects() {
         try {
             this.showLoading('pendingProjectsList');
@@ -1690,6 +1918,7 @@ class CapstoneApp {
         const authNavLink = document.getElementById('authNavLink');
         const userInfo = document.getElementById('userInfo');
         const logoutBtn = document.getElementById('logoutBtn');
+        const studentDashboardLink = document.getElementById('studentDashboardLink');
 
         if (userStatus && authNavLink && userInfo && this.currentUser) {
             // Hide login link
@@ -1703,6 +1932,15 @@ class CapstoneApp {
             const displayName = user.fullName || user.organizationName || user.email;
             userInfo.textContent = `${displayName} (${user.type})`;
             
+            // Show/hide dashboard link based on user type
+            if (studentDashboardLink) {
+                if (user.type === 'student') {
+                    studentDashboardLink.style.display = 'block';
+                } else {
+                    studentDashboardLink.style.display = 'none';
+                }
+            }
+            
             // Setup logout button
             if (logoutBtn) {
                 logoutBtn.onclick = () => this.logout();
@@ -1715,7 +1953,7 @@ class CapstoneApp {
                 } else if (user.type === 'client') {
                     this.showClientDashboard();
                 } else if (user.type === 'student') {
-                    this.showSection('projects'); // Students go to projects page
+                    this.showStudentDashboard(); // Students go to their dashboard
                 }
             }
         }
@@ -1724,6 +1962,7 @@ class CapstoneApp {
     updateUIForUnauthenticatedUser() {
         const userStatus = document.getElementById('userStatus');
         const authNavLink = document.getElementById('authNavLink');
+        const studentDashboardLink = document.getElementById('studentDashboardLink');
 
         if (userStatus && authNavLink) {
             // Show login link
@@ -1731,6 +1970,11 @@ class CapstoneApp {
             
             // Hide user status
             userStatus.style.display = 'none';
+            
+            // Hide dashboard link
+            if (studentDashboardLink) {
+                studentDashboardLink.style.display = 'none';
+            }
         }
     }
 

@@ -21,6 +21,7 @@
                             <li><a href="#home" class="nav-link active">Home</a></li>
                             <li><a href="#projects" class="nav-link">Projects</a></li>
                             <li><a href="#gallery" class="nav-link">Gallery</a></li>
+                            <li><a href="#studentDashboard" class="nav-link" id="studentDashboardLink" style="display: none;">My Dashboard</a></li>
                             <li><a href="#login" class="nav-link" id="authNavLink">Login</a></li>
                         </ul>
                         <div id="userStatus" class="user-status" style="display: none;">
@@ -127,6 +128,62 @@
                     <p class="section-subtitle">Explore past capstone projects that made a real impact</p>
                     <div id="galleryList" class="gallery-grid">
                         <div class="loading">Loading gallery...</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Student Dashboard Section -->
+            <section id="studentDashboard" class="section section-student-dashboard">
+                <div class="container">
+                    <h2 class="section-title">My Dashboard</h2>
+                    <div class="dashboard-container">
+                        
+                        <!-- Dashboard Stats -->
+                        <div class="dashboard-stats" id="studentStats">
+                            <div class="loading">Loading dashboard...</div>
+                        </div>
+
+                        <!-- Dashboard Tabs -->
+                        <div class="dashboard-tabs">
+                            <button class="tab-btn active" data-tab="interests">My Interests</button>
+                            <button class="tab-btn" data-tab="favorites">My Favorites</button>
+                            <button class="tab-btn" data-tab="profile">Profile</button>
+                        </div>
+
+                        <!-- Tab Content -->
+                        <div class="tab-content">
+                            <!-- Interests Tab -->
+                            <div id="interestsTab" class="tab-panel active">
+                                <div class="interests-header">
+                                    <h3>My Project Interests</h3>
+                                    <span class="interest-count-badge" id="interestCountBadge">0/5 interests</span>
+                                </div>
+                                <div id="interestsList" class="dashboard-list">
+                                    <div class="loading">Loading interests...</div>
+                                </div>
+                            </div>
+
+                            <!-- Favorites Tab -->
+                            <div id="favoritesTab" class="tab-panel">
+                                <div class="favorites-header">
+                                    <h3>My Favorite Projects</h3>
+                                    <span class="favorites-count-badge" id="favoritesCountBadge">0/20 favorites</span>
+                                </div>
+                                <div id="favoritesList" class="dashboard-list">
+                                    <div class="loading">Loading favorites...</div>
+                                </div>
+                            </div>
+
+                            <!-- Profile Tab -->
+                            <div id="profileTab" class="tab-panel">
+                                <div class="profile-header">
+                                    <h3>My Profile</h3>
+                                </div>
+                                <div id="profileInfo" class="profile-info">
+                                    <div class="loading">Loading profile...</div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </section>

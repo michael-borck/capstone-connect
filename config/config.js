@@ -6,13 +6,15 @@ const config = {
     isProduction: (process.env.NODE_ENV || 'development') === 'production',
 
     // Server configuration
-    port: process.env.PORT || 3000,
+    port: process.env.PORT || 1077,
     host: process.env.HOST || 'localhost',
 
     // CORS settings
     allowedOrigins: [
+        'http://localhost:1077',
         'http://localhost:3000',
         'http://localhost:3001',
+        'http://127.0.0.1:1077',
         'http://127.0.0.1:3000',
         'http://127.0.0.1:3001',
         ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : [])
