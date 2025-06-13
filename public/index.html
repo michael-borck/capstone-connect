@@ -22,11 +22,13 @@
                             <li><a href="#projects" class="nav-link">Projects</a></li>
                             <li><a href="#gallery" class="nav-link">Gallery</a></li>
                             <li><a href="#studentDashboard" class="nav-link" id="studentDashboardLink" style="display: none;">My Dashboard</a></li>
+                            <li><a href="#clientDashboard" class="nav-link" id="clientDashboardLink" style="display: none;">Dashboard</a></li>
+                            <li><a href="#admin" class="nav-link" id="adminDashboardLink" style="display: none;">Admin Dashboard</a></li>
                             <li><a href="#login" class="nav-link" id="authNavLink">Login</a></li>
                         </ul>
                         <div id="userStatus" class="user-status" style="display: none;">
                             <span id="userInfo"></span>
-                            <button id="logoutBtn" class="btn btn-outline btn-sm">Logout</button>
+                            <button id="logoutBtn" class="btn btn-outline" style="padding: 0.3rem 0.6rem; font-size: 0.8rem;">Logout</button>
                         </div>
                     </nav>
                     <button class="mobile-menu-toggle" id="mobileMenuToggle">
@@ -208,6 +210,7 @@
                             <button class="admin-tab" data-tab="all">All Projects</button>
                             <button class="admin-tab" data-tab="users">User Management</button>
                             <button class="admin-tab" data-tab="gallery">Gallery Management</button>
+                            <button class="admin-tab" data-tab="settings">Settings</button>
                         </div>
                         
                         <div class="admin-content">
@@ -273,6 +276,9 @@
                             <div id="allProjectsPanel" class="admin-panel">
                                 <div class="admin-panel-header">
                                     <h3>All Projects</h3>
+                                    <button class="btn btn-primary" onclick="window.capstoneApp.showCreateProjectModal()" style="margin-left: auto; margin-right: 20px;">
+                                        Create Project
+                                    </button>
                                     <div class="admin-filters">
                                         <div class="admin-filter-group">
                                             <label class="admin-filter-label">Search:</label>
@@ -285,8 +291,10 @@
                                                 <option value="pending">Pending</option>
                                                 <option value="approved">Approved</option>
                                                 <option value="active">Active</option>
+                                                <option value="inactive">Inactive</option>
                                                 <option value="rejected">Rejected</option>
                                                 <option value="completed">Completed</option>
+                                                <option value="archived">Archived</option>
                                             </select>
                                         </div>
                                         <div class="admin-filter-group">
@@ -310,6 +318,9 @@
                             <div id="usersPanel" class="admin-panel">
                                 <div class="admin-panel-header">
                                     <h3>User Management</h3>
+                                    <button class="btn btn-primary" onclick="window.capstoneApp.showAddUserModal()" style="margin-left: auto; margin-right: 20px;">
+                                        Add User
+                                    </button>
                                     <div class="admin-filters">
                                         <div class="admin-filter-group">
                                             <label class="admin-filter-label">Search:</label>
@@ -413,6 +424,62 @@
                                 
                                 <div id="galleryItemsList" class="gallery-grid">
                                     <div class="loading">Loading gallery items...</div>
+                                </div>
+                            </div>
+                            
+                            <!-- Settings Tab -->
+                            <div id="settingsPanel" class="admin-panel">
+                                <div class="admin-panel-header">
+                                    <h3>System Settings</h3>
+                                    <div class="settings-actions">
+                                        <button class="btn btn-outline btn-sm" onclick="window.capstoneApp.exportSettings()">
+                                            Export Settings
+                                        </button>
+                                        <button class="btn btn-outline btn-sm" onclick="window.capstoneApp.importSettings()">
+                                            Import Settings
+                                        </button>
+                                        <button class="btn btn-warning btn-sm" onclick="resetAllSettings()" title="Reset all settings to factory defaults">
+                                            Reset to Defaults
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <div class="settings-container">
+                                    <!-- Settings Categories -->
+                                    <div class="settings-sidebar">
+                                        <button class="settings-category active" data-category="branding">
+                                            Branding & Identity
+                                        </button>
+                                        <button class="settings-category" data-category="auth">
+                                            Registration & Auth
+                                        </button>
+                                        <button class="settings-category" data-category="features">
+                                            Features
+                                        </button>
+                                        <button class="settings-category" data-category="rules">
+                                            Business Rules
+                                        </button>
+                                        <button class="settings-category" data-category="privacy">
+                                            Privacy & Data
+                                        </button>
+                                    </div>
+                                    
+                                    <!-- Settings Content -->
+                                    <div class="settings-content">
+                                        <div id="settingsLoader" class="loading">Loading settings...</div>
+                                        <div id="settingsForm" style="display: none;">
+                                            <!-- Dynamic settings will be loaded here -->
+                                        </div>
+                                        <div class="settings-save-bar" style="display: none;">
+                                            <p class="unsaved-changes">You have unsaved changes. Save and refresh page to see updates.</p>
+                                            <button class="btn btn-secondary" onclick="window.capstoneApp.resetSettings()">
+                                                Reset
+                                            </button>
+                                            <button class="btn btn-primary" onclick="window.capstoneApp.saveSettings()">
+                                                Save Changes
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>

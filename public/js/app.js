@@ -9,10 +9,12 @@ class CapstoneApp {
         this.init();
     }
 
-    init() {
+    async init() {
         this.setupEventListeners();
-        this.checkAuthStatus();
-        this.loadInitialData();
+        await this.checkAuthStatus();
+        await this.loadInitialData();
+        await this.loadBrandingSettings();
+        await this.loadBusinessRules();
     }
 
     setupEventListeners() {
@@ -116,27 +118,15 @@ class CapstoneApp {
         try {
             this.showLoading('galleryList');
             
-            // Mock gallery data
-            const mockGallery = [
-                {
-                    id: 1,
-                    title: 'Smart Campus Navigation App',
-                    description: 'AR-enabled mobile app for campus navigation...',
-                    year: 2023,
-                    category: 'Mobile Development',
-                    client_name: 'Curtin University'
-                },
-                {
-                    id: 2,
-                    title: 'Predictive Maintenance System',
-                    description: 'IoT-based system for predicting equipment failures...',
-                    year: 2023,
-                    category: 'IoT & Machine Learning',
-                    client_name: 'Industrial Solutions Ltd'
-                }
-            ];
-
-            this.galleryItems = mockGallery;
+            // Fetch approved gallery items from the public endpoint
+            const response = await fetch('/api/gallery');
+            
+            if (!response.ok) {
+                throw new Error('Failed to fetch gallery items');
+            }
+            
+            const data = await response.json();
+            this.galleryItems = data.gallery || [];
             this.renderGallery(this.galleryItems);
             
         } catch (error) {
@@ -1458,6 +1448,12 @@ class CapstoneApp {
     }
 
     async showAdminDashboard() {
+        // Ensure auth is ready
+        if (!window.authManager || !window.authManager.isAuthenticated()) {
+            console.log('Auth not ready in showAdminDashboard, waiting...');
+            await this.checkAuthStatus();
+        }
+        
         if (!this.currentUser || this.currentUser.type !== 'admin') {
             this.showErrorToast('Access Denied', 'Admin access required');
             return;
@@ -1501,7 +1497,8 @@ class CapstoneApp {
             'pending': 'pendingProjects',
             'stats': 'statsPanel',
             'all': 'allProjectsPanel',
-            'users': 'usersPanel'
+            'users': 'usersPanel',
+            'gallery': 'galleryPanel'
         };
         
         const panelId = panelMap[tabType] || `${tabType}Panel`;
@@ -1523,6 +1520,12 @@ class CapstoneApp {
                 break;
             case 'users':
                 this.loadUserManagement();
+                break;
+            case 'gallery':
+                this.loadGalleryManagement();
+                break;
+            case 'settings':
+                this.loadSettings();
                 break;
         }
     }
@@ -2148,7 +2151,7 @@ class CapstoneApp {
         try {
             this.showLoading('pendingProjectsList');
             
-            const response = await fetch('/api/projects/admin/pending', {
+            const response = await fetch('/api/admin/projects/pending', {
                 headers: {
                     'Authorization': `Bearer ${window.authManager.getToken()}`
                 },
@@ -2318,6 +2321,173 @@ class CapstoneApp {
         }
     }
 
+    async completeProject(projectId) {
+        // Find project in current projects list
+        const project = this.allProjects?.find(p => p.id === projectId);
+        const projectTitle = project ? project.title : 'this project';
+        
+        const confirmMessage = `Mark "${projectTitle}" as completed?\n\nThis action will:\n• Mark the project as completed\n• Create a snapshot of the current project data\n• Make it available for addition to the gallery\n• Students can no longer express interest\n\nThis action cannot be undone.`;
+        
+        if (!confirm(confirmMessage)) {
+            return;
+        }
+        
+        const notes = prompt('Optional: Add completion notes (internal use only):') || '';
+        
+        try {
+            const projectElement = document.querySelector(`[data-project-id="${projectId}"]`);
+            const completeBtn = projectElement?.querySelector('.btn-primary');
+            
+            if (completeBtn) {
+                completeBtn.classList.add('btn-loading');
+                completeBtn.disabled = true;
+            }
+
+            const response = await fetch(`/api/projects/${projectId}/complete`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${window.authManager.getToken()}`
+                },
+                credentials: 'include',
+                body: JSON.stringify({
+                    completionNotes: notes
+                })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                this.showSuccessToast('Project Completed', 'The project has been marked as completed and is now eligible for the gallery.');
+                await this.loadAllProjects(); // Refresh the list
+            } else {
+                this.showErrorToast('Completion Failed', data.error || 'Failed to complete project');
+            }
+
+        } catch (error) {
+            console.error('Error completing project:', error);
+            this.showErrorToast('Network Error', 'Please check your connection and try again.');
+        } finally {
+            // Re-enable button
+            const projectElement = document.querySelector(`[data-project-id="${projectId}"]`);
+            const completeBtn = projectElement?.querySelector('.btn-primary');
+            if (completeBtn) {
+                completeBtn.classList.remove('btn-loading');
+                completeBtn.disabled = false;
+            }
+        }
+    }
+
+    async archiveProject(projectId) {
+        // Find project in current projects list
+        const project = this.allProjects?.find(p => p.id === projectId);
+        const projectTitle = project ? project.title : 'this project';
+        
+        const confirmMessage = `Archive "${projectTitle}"?\n\nThis action will:\n• Move the project to archived status\n• Hide it from most views\n• Preserve all project data\n• Can be restored later if needed\n\nContinue?`;
+        
+        if (!confirm(confirmMessage)) {
+            return;
+        }
+        
+        try {
+            const projectElement = document.querySelector(`[data-project-id="${projectId}"]`);
+            const archiveBtn = projectElement?.querySelector('.btn-secondary');
+            
+            if (archiveBtn) {
+                archiveBtn.classList.add('btn-loading');
+                archiveBtn.disabled = true;
+            }
+
+            const response = await fetch(`/api/projects/${projectId}/status`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${window.authManager.getToken()}`
+                },
+                credentials: 'include',
+                body: JSON.stringify({
+                    status: 'archived'
+                })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                this.showInfoToast('Project Archived', 'The project has been archived and moved out of active view.');
+                await this.loadAllProjects(); // Refresh the list
+            } else {
+                this.showErrorToast('Archive Failed', data.error || 'Failed to archive project');
+            }
+
+        } catch (error) {
+            console.error('Error archiving project:', error);
+            this.showErrorToast('Network Error', 'Please check your connection and try again.');
+        } finally {
+            // Re-enable button
+            const projectElement = document.querySelector(`[data-project-id="${projectId}"]`);
+            const archiveBtn = projectElement?.querySelector('.btn-secondary');
+            if (archiveBtn) {
+                archiveBtn.classList.remove('btn-loading');
+                archiveBtn.disabled = false;
+            }
+        }
+    }
+
+    async deactivateProject(projectId) {
+        // Find project in current projects list
+        const project = this.allProjects?.find(p => p.id === projectId);
+        const projectTitle = project ? project.title : 'this project';
+        
+        const confirmMessage = `Deactivate "${projectTitle}"?\n\nThis action will:\n• Change project status from approved to inactive\n• Students can no longer express interest\n• Hide project from public view\n• Can be reactivated later\n\nContinue?`;
+        
+        if (!confirm(confirmMessage)) {
+            return;
+        }
+        
+        try {
+            const projectElement = document.querySelector(`[data-project-id="${projectId}"]`);
+            const deactivateBtn = projectElement?.querySelector('.btn-warning');
+            
+            if (deactivateBtn) {
+                deactivateBtn.classList.add('btn-loading');
+                deactivateBtn.disabled = true;
+            }
+
+            const response = await fetch(`/api/projects/${projectId}/status`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${window.authManager.getToken()}`
+                },
+                credentials: 'include',
+                body: JSON.stringify({
+                    status: 'inactive'
+                })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                this.showWarningToast('Project Deactivated', 'The project has been deactivated and is no longer visible to students.');
+                await this.loadAllProjects(); // Refresh the list
+            } else {
+                this.showErrorToast('Deactivation Failed', data.error || 'Failed to deactivate project');
+            }
+
+        } catch (error) {
+            console.error('Error deactivating project:', error);
+            this.showErrorToast('Network Error', 'Please check your connection and try again.');
+        } finally {
+            // Re-enable button
+            const projectElement = document.querySelector(`[data-project-id="${projectId}"]`);
+            const deactivateBtn = projectElement?.querySelector('.btn-warning');
+            if (deactivateBtn) {
+                deactivateBtn.classList.remove('btn-loading');
+                deactivateBtn.disabled = false;
+            }
+        }
+    }
+
     // Admin Statistics Methods
     async loadAdminStatistics() {
         try {
@@ -2336,6 +2506,12 @@ class CapstoneApp {
 
             const data = await response.json();
             this.renderAdminStatistics(data);
+            
+            // For now, show a simple message for charts
+            const chartsContainer = document.getElementById('adminCharts');
+            if (chartsContainer) {
+                chartsContainer.innerHTML = '<p style="text-align: center; color: #666; padding: 2rem;">Chart visualization coming soon. Use the statistics above for current metrics.</p>';
+            }
             
         } catch (error) {
             console.error('Error loading admin statistics:', error);
@@ -2493,14 +2669,32 @@ class CapstoneApp {
                     <button class="btn btn-outline" onclick="window.capstoneApp.showProjectDetails(${project.id})">
                         View Details
                     </button>
-                    ${project.status === 'approved' ? `
+                    ${project.status === 'pending' ? `
+                        <button class="btn btn-success" onclick="window.capstoneApp.approveProject(${project.id})">
+                            Approve
+                        </button>
+                        <button class="btn btn-danger" onclick="window.capstoneApp.rejectProject(${project.id})">
+                            Reject
+                        </button>
+                    ` : ''}
+                    ${(project.status === 'approved' || project.status === 'active') ? `
+                        <button class="btn btn-primary" onclick="window.capstoneApp.completeProject(${project.id})">
+                            Complete
+                        </button>
+                    ` : ''}
+                    ${project.status === 'active' ? `
                         <button class="btn btn-warning" onclick="window.capstoneApp.deactivateProject(${project.id})">
                             Deactivate
                         </button>
                     ` : ''}
-                    ${project.status === 'active' ? `
+                    ${project.status === 'completed' ? `
                         <button class="btn btn-secondary" onclick="window.capstoneApp.archiveProject(${project.id})">
                             Archive
+                        </button>
+                    ` : ''}
+                    ${(project.status === 'rejected' || project.status === 'archived') ? `
+                        <button class="btn btn-danger" onclick="window.capstoneApp.deleteProject(${project.id})">
+                            Delete
                         </button>
                     ` : ''}
                 </div>
@@ -2866,14 +3060,1194 @@ class CapstoneApp {
         return type.charAt(0).toUpperCase() + type.slice(1).replace(/([A-Z])/g, ' $1');
     }
 
-    viewUserDetails(userId) {
-        // Placeholder for user details functionality
-        this.showInfoToast('User Details', 'User details functionality coming soon.');
+    async viewUserDetails(userId) {
+        try {
+            // Find the user in our current users list
+            const users = this.currentUsers || [];
+            const user = users.find(u => u.id === userId);
+            
+            if (!user) {
+                this.showErrorToast('Error', 'User not found');
+                return;
+            }
+            
+            // Show user details in a modal
+            const modal = document.getElementById('modal');
+            const modalBody = document.getElementById('modalBody');
+            
+            modalBody.innerHTML = `
+                <h2>User Details</h2>
+                <div class="user-details">
+                    <div class="detail-row">
+                        <strong>Type:</strong> <span class="user-type-badge user-type-${user.type}">${user.type}</span>
+                    </div>
+                    <div class="detail-row">
+                        <strong>Name:</strong> ${this.escapeHtml(user.full_name || user.organization_name || 'N/A')}
+                    </div>
+                    <div class="detail-row">
+                        <strong>Email:</strong> ${this.escapeHtml(user.email)}
+                    </div>
+                    <div class="detail-row">
+                        <strong>Joined:</strong> ${new Date(user.created_at).toLocaleDateString()}
+                    </div>
+                    ${user.type === 'student' ? `
+                        <div class="detail-row">
+                            <strong>Student ID:</strong> ${this.escapeHtml(user.student_id || 'N/A')}
+                        </div>
+                        <div class="detail-row">
+                            <strong>Course:</strong> ${this.escapeHtml(user.course || 'N/A')}
+                        </div>
+                        <div class="detail-row">
+                            <strong>Year Level:</strong> ${user.year_level || 'N/A'}
+                        </div>
+                        <div class="detail-row">
+                            <strong>Interests:</strong> ${user.interests_count || 0} projects
+                        </div>
+                    ` : ''}
+                    ${user.type === 'client' ? `
+                        <div class="detail-row">
+                            <strong>Organization:</strong> ${this.escapeHtml(user.organization_name)}
+                        </div>
+                        <div class="detail-row">
+                            <strong>Website:</strong> ${user.website ? `<a href="${this.escapeHtml(user.website)}" target="_blank">${this.escapeHtml(user.website)}</a>` : 'N/A'}
+                        </div>
+                        <div class="detail-row">
+                            <strong>Projects:</strong> ${user.projects_count || 0} submitted
+                        </div>
+                    ` : ''}
+                    <div class="detail-row">
+                        <strong>Status:</strong> ${user.is_archived ? '<span style="color: var(--warning-color);">Archived</span>' : '<span style="color: var(--success-color);">Active</span>'}
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn btn-secondary" onclick="closeModal()">Close</button>
+                    ${!user.is_archived ? `
+                        <button class="btn btn-warning" onclick="window.capstoneApp.archiveUser(${userId})">Archive User</button>
+                    ` : `
+                        <button class="btn btn-success" onclick="window.capstoneApp.restoreUser(${userId})">Restore User</button>
+                    `}
+                </div>
+            `;
+            
+            modal.style.display = 'block';
+            
+        } catch (error) {
+            console.error('Error viewing user details:', error);
+            this.showErrorToast('Error', 'Failed to load user details');
+        }
+    }
+    
+    showAddUserModal() {
+        const modal = document.getElementById('modal');
+        const modalBody = document.getElementById('modalBody');
+        
+        modalBody.innerHTML = `
+            <h2>Add New User</h2>
+            <form id="addUserForm" class="auth-form">
+                <div class="form-group">
+                    <label for="userType">User Type *</label>
+                    <select id="userType" required onchange="window.capstoneApp.toggleUserTypeFields()">
+                        <option value="">Select user type...</option>
+                        <option value="student">Student</option>
+                        <option value="client">Client</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="userEmail">Email *</label>
+                    <input type="email" id="userEmail" required placeholder="user@example.com">
+                </div>
+                
+                <div class="form-group">
+                    <label for="userPassword">Password *</label>
+                    <input type="password" id="userPassword" required placeholder="Minimum 8 characters">
+                </div>
+                
+                <!-- Student fields -->
+                <div id="studentFields" style="display: none;">
+                    <div class="form-group">
+                        <label for="fullName">Full Name *</label>
+                        <input type="text" id="fullName" placeholder="John Doe">
+                    </div>
+                    <div class="form-group">
+                        <label for="studentId">Student ID *</label>
+                        <input type="text" id="studentId" placeholder="12345678">
+                    </div>
+                    <div class="form-group">
+                        <label for="course">Course *</label>
+                        <input type="text" id="course" placeholder="Computer Science">
+                    </div>
+                    <div class="form-group">
+                        <label for="yearLevel">Year Level *</label>
+                        <select id="yearLevel">
+                            <option value="1">Year 1</option>
+                            <option value="2">Year 2</option>
+                            <option value="3">Year 3</option>
+                            <option value="4">Year 4</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- Client fields -->
+                <div id="clientFields" style="display: none;">
+                    <div class="form-group">
+                        <label for="orgName">Organization Name *</label>
+                        <input type="text" id="orgName" placeholder="Company Inc.">
+                    </div>
+                    <div class="form-group">
+                        <label for="contactName">Contact Name *</label>
+                        <input type="text" id="contactName" placeholder="Jane Smith">
+                    </div>
+                    <div class="form-group">
+                        <label for="website">Website</label>
+                        <input type="url" id="website" placeholder="https://example.com">
+                    </div>
+                </div>
+                
+                <!-- Admin fields -->
+                <div id="adminFields" style="display: none;">
+                    <div class="form-group">
+                        <label for="adminName">Full Name *</label>
+                        <input type="text" id="adminName" placeholder="Admin Name">
+                    </div>
+                </div>
+                
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create User</button>
+                </div>
+            </form>
+        `;
+        
+        const form = document.getElementById('addUserForm');
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await this.createUser();
+        });
+        
+        modal.style.display = 'block';
+    }
+    
+    toggleUserTypeFields() {
+        const userType = document.getElementById('userType').value;
+        document.getElementById('studentFields').style.display = userType === 'student' ? 'block' : 'none';
+        document.getElementById('clientFields').style.display = userType === 'client' ? 'block' : 'none';
+        document.getElementById('adminFields').style.display = userType === 'admin' ? 'block' : 'none';
+        
+        // Update required attributes
+        const studentInputs = document.querySelectorAll('#studentFields input, #studentFields select');
+        const clientInputs = document.querySelectorAll('#clientFields input[required]');
+        const adminInputs = document.querySelectorAll('#adminFields input');
+        
+        studentInputs.forEach(input => input.required = userType === 'student');
+        clientInputs.forEach(input => input.required = userType === 'client');
+        adminInputs.forEach(input => input.required = userType === 'admin');
+    }
+    
+    async createUser() {
+        try {
+            const userType = document.getElementById('userType').value;
+            const email = document.getElementById('userEmail').value;
+            const password = document.getElementById('userPassword').value;
+            
+            let userData = {
+                email,
+                password,
+                type: userType
+            };
+            
+            // Add type-specific fields
+            if (userType === 'student') {
+                userData.fullName = document.getElementById('fullName').value;
+                userData.studentId = document.getElementById('studentId').value;
+                userData.course = document.getElementById('course').value;
+                userData.yearLevel = document.getElementById('yearLevel').value;
+            } else if (userType === 'client') {
+                userData.organizationName = document.getElementById('orgName').value;
+                userData.contactName = document.getElementById('contactName').value;
+                userData.website = document.getElementById('website').value;
+            } else if (userType === 'admin') {
+                userData.fullName = document.getElementById('adminName').value;
+            }
+            
+            const response = await fetch('/api/admin/users/create', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${window.authManager.getToken()}`
+                },
+                credentials: 'include',
+                body: JSON.stringify(userData)
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.message || 'Failed to create user');
+            }
+            
+            this.showSuccessToast('User Created', `New ${userType} account created successfully`);
+            this.closeModal();
+            
+            // Refresh users list
+            if (document.querySelector('.admin-tab[data-tab="users"].active')) {
+                await this.loadUsers();
+            }
+            
+        } catch (error) {
+            console.error('Error creating user:', error);
+            this.showErrorToast('Error', error.message || 'Failed to create user');
+        }
+    }
+    
+    async archiveUser(userId) {
+        if (!confirm('Are you sure you want to archive this user?')) {
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/admin/users/${userId}/archive`, {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `Bearer ${window.authManager.getToken()}`
+                },
+                credentials: 'include'
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.message || 'Failed to archive user');
+            }
+            
+            this.showSuccessToast('User Archived', 'User has been archived successfully');
+            this.closeModal();
+            
+            // Refresh users list
+            if (document.querySelector('.admin-tab[data-tab="users"].active')) {
+                await this.loadUsers();
+            }
+            
+        } catch (error) {
+            console.error('Error archiving user:', error);
+            this.showErrorToast('Error', error.message || 'Failed to archive user');
+        }
+    }
+    
+    async restoreUser(userId) {
+        try {
+            const response = await fetch(`/api/admin/users/${userId}/restore`, {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `Bearer ${window.authManager.getToken()}`
+                },
+                credentials: 'include'
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.message || 'Failed to restore user');
+            }
+            
+            this.showSuccessToast('User Restored', 'User has been restored successfully');
+            this.closeModal();
+            
+            // Refresh users list
+            if (document.querySelector('.admin-tab[data-tab="users"].active')) {
+                await this.loadUsers();
+            }
+            
+        } catch (error) {
+            console.error('Error restoring user:', error);
+            this.showErrorToast('Error', error.message || 'Failed to restore user');
+        }
+    }
+    
+    async showCreateProjectModal() {
+        const modal = document.getElementById('modal');
+        const modalBody = document.getElementById('modalBody');
+        
+        // First, get list of clients
+        try {
+            const response = await fetch('/api/admin/users?type=client&status=active', {
+                headers: { 'Authorization': `Bearer ${window.authManager.getToken()}` },
+                credentials: 'include'
+            });
+            
+            const data = await response.json();
+            const clients = data.users || [];
+            
+            modalBody.innerHTML = `
+                <h2>Create New Project</h2>
+                <form id="createProjectForm" class="project-form">
+                    <div class="form-group">
+                        <label for="projectClient">Client Organization *</label>
+                        <select id="projectClient" required onchange="window.capstoneApp.toggleNewClientFields()">
+                            <option value="">Select existing client...</option>
+                            ${clients.map(client => `
+                                <option value="${client.id}">${this.escapeHtml(client.organization_name)} - ${this.escapeHtml(client.email)}</option>
+                            `).join('')}
+                            <option value="new">+ Create New Client</option>
+                        </select>
+                    </div>
+                    
+                    <!-- New Client Fields -->
+                    <div id="newClientFields" style="display: none; border: 1px solid #ddd; padding: 15px; margin-bottom: 20px; border-radius: 5px;">
+                        <h4>New Client Details</h4>
+                        <div class="form-group">
+                            <label for="newClientOrg">Organization Name *</label>
+                            <input type="text" id="newClientOrg" placeholder="Company Inc.">
+                        </div>
+                        <div class="form-group">
+                            <label for="newClientContact">Contact Name *</label>
+                            <input type="text" id="newClientContact" placeholder="Jane Smith">
+                        </div>
+                        <div class="form-group">
+                            <label for="newClientEmail">Email *</label>
+                            <input type="email" id="newClientEmail" placeholder="contact@company.com">
+                        </div>
+                        <div class="form-group">
+                            <label for="newClientPassword">Password *</label>
+                            <input type="password" id="newClientPassword" placeholder="Minimum 8 characters">
+                        </div>
+                    </div>
+                    
+                    <!-- Project Details -->
+                    <h4>Project Details</h4>
+                    <div class="form-group">
+                        <label for="projectTitle">Project Title *</label>
+                        <input type="text" id="projectTitle" required placeholder="Enter project title">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="projectDescription">Description *</label>
+                        <textarea id="projectDescription" rows="4" required placeholder="Describe the project goals and requirements..."></textarea>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="projectType">Project Type *</label>
+                            <select id="projectType" required>
+                                <option value="">Select type...</option>
+                                <option value="development">Development</option>
+                                <option value="research">Research</option>
+                                <option value="design">Design</option>
+                                <option value="analysis">Analysis</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="teamSize">Team Size *</label>
+                            <input type="number" id="teamSize" min="1" max="10" value="3" required>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="projectSkills">Required Skills</label>
+                        <input type="text" id="projectSkills" placeholder="e.g., Python, React, Machine Learning">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="projectStatus">Initial Status *</label>
+                        <select id="projectStatus" required>
+                            <option value="pending">Pending (Requires Admin Approval)</option>
+                            <option value="approved">Approved (Immediately Visible)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Create Project</button>
+                    </div>
+                </form>
+            `;
+            
+            const form = document.getElementById('createProjectForm');
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                await this.createProjectAsAdmin();
+            });
+            
+            modal.style.display = 'block';
+            
+        } catch (error) {
+            console.error('Error loading clients:', error);
+            this.showErrorToast('Error', 'Failed to load client list');
+        }
+    }
+    
+    toggleNewClientFields() {
+        const clientSelect = document.getElementById('projectClient');
+        const newClientFields = document.getElementById('newClientFields');
+        const isNewClient = clientSelect.value === 'new';
+        
+        newClientFields.style.display = isNewClient ? 'block' : 'none';
+        
+        // Update required attributes for new client fields
+        const newClientInputs = newClientFields.querySelectorAll('input');
+        newClientInputs.forEach(input => input.required = isNewClient);
+    }
+    
+    async createProjectAsAdmin() {
+        try {
+            const clientSelect = document.getElementById('projectClient').value;
+            let clientId;
+            
+            // If creating new client
+            if (clientSelect === 'new') {
+                const clientData = {
+                    type: 'client',
+                    email: document.getElementById('newClientEmail').value,
+                    password: document.getElementById('newClientPassword').value,
+                    organizationName: document.getElementById('newClientOrg').value,
+                    contactName: document.getElementById('newClientContact').value
+                };
+                
+                const clientResponse = await fetch('/api/admin/users/create', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${window.authManager.getToken()}`
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify(clientData)
+                });
+                
+                if (!clientResponse.ok) {
+                    const error = await clientResponse.json();
+                    throw new Error(error.message || 'Failed to create client');
+                }
+                
+                const newClient = await clientResponse.json();
+                clientId = newClient.user.id;
+                this.showSuccessToast('Client Created', 'New client account created successfully');
+                
+            } else {
+                clientId = parseInt(clientSelect);
+            }
+            
+            // Create the project
+            const projectData = {
+                clientId,
+                title: document.getElementById('projectTitle').value,
+                description: document.getElementById('projectDescription').value,
+                type: document.getElementById('projectType').value,
+                teamSize: parseInt(document.getElementById('teamSize').value),
+                requiredSkills: document.getElementById('projectSkills').value,
+                status: document.getElementById('projectStatus').value
+            };
+            
+            const projectResponse = await fetch('/api/admin/projects/create', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${window.authManager.getToken()}`
+                },
+                credentials: 'include',
+                body: JSON.stringify(projectData)
+            });
+            
+            if (!projectResponse.ok) {
+                const error = await projectResponse.json();
+                throw new Error(error.message || 'Failed to create project');
+            }
+            
+            this.showSuccessToast('Project Created', 'Project has been created successfully');
+            this.closeModal();
+            
+            // Refresh projects list
+            if (document.querySelector('.admin-tab[data-tab="all"].active')) {
+                await this.loadAllProjects();
+            } else if (document.querySelector('.admin-tab[data-tab="pending"].active') && projectData.status === 'pending') {
+                await this.loadPendingProjects();
+            }
+            
+        } catch (error) {
+            console.error('Error creating project:', error);
+            this.showErrorToast('Error', error.message || 'Failed to create project');
+        }
     }
 
     showModal() {
         document.getElementById('modal').style.display = 'block';
         document.body.style.overflow = 'hidden';
+    }
+    
+    // Settings Management Functions
+    async loadSettings() {
+        try {
+            // Setup category switching
+            this.setupSettingsCategories();
+            
+            // Load settings for the active category
+            await this.loadSettingsCategory('branding');
+            
+        } catch (error) {
+            console.error('Error loading settings:', error);
+            this.showErrorToast('Error', 'Failed to load settings');
+        }
+    }
+    
+    setupSettingsCategories() {
+        const categories = document.querySelectorAll('.settings-category');
+        categories.forEach(cat => {
+            cat.addEventListener('click', async (e) => {
+                // Update active state
+                categories.forEach(c => c.classList.remove('active'));
+                e.target.classList.add('active');
+                
+                // Load settings for this category
+                const category = e.target.getAttribute('data-category');
+                await this.loadSettingsCategory(category);
+            });
+        });
+    }
+    
+    async loadSettingsCategory(category) {
+        const loader = document.getElementById('settingsLoader');
+        const form = document.getElementById('settingsForm');
+        
+        loader.style.display = 'block';
+        form.style.display = 'none';
+        
+        try {
+            const response = await fetch(`/api/admin/settings/${category}`, {
+                headers: { 'Authorization': `Bearer ${window.authManager.getToken()}` },
+                credentials: 'include'
+            });
+            
+            if (!response.ok) throw new Error('Failed to load settings');
+            
+            const data = await response.json();
+            this.currentSettings = data.settings;
+            this.originalSettings = JSON.parse(JSON.stringify(data.settings)); // Deep copy
+            
+            // Render settings form
+            this.renderSettingsForm(category, data.settings);
+            
+            loader.style.display = 'none';
+            form.style.display = 'block';
+            
+        } catch (error) {
+            console.error('Error loading settings category:', error);
+            loader.innerHTML = '<div class="error">Failed to load settings</div>';
+        }
+    }
+    
+    renderSettingsForm(category, settings) {
+        const form = document.getElementById('settingsForm');
+        let html = '';
+        
+        // Group settings by subcategory if needed
+        const groups = this.groupSettings(category, settings);
+        
+        for (const [groupName, groupSettings] of Object.entries(groups)) {
+            html += `<div class="settings-group">`;
+            if (groupName !== 'default') {
+                html += `<h4>${this.formatGroupName(groupName)}</h4>`;
+            }
+            
+            for (const setting of groupSettings) {
+                html += this.renderSettingItem(setting);
+            }
+            
+            html += `</div>`;
+        }
+        
+        form.innerHTML = html;
+        
+        // Add event listeners
+        this.attachSettingListeners();
+    }
+    
+    groupSettings(category, settings) {
+        // For now, just return all settings in default group
+        // Can be enhanced to group by subcategories
+        return { default: settings };
+    }
+    
+    formatGroupName(name) {
+        return name.charAt(0).toUpperCase() + name.slice(1).replace(/_/g, ' ');
+    }
+    
+    renderSettingItem(setting) {
+        const { setting_key, setting_value, setting_type, description } = setting;
+        let inputHtml = '';
+        
+        switch (setting_type) {
+            case 'string':
+                if (setting_key.includes('color')) {
+                    inputHtml = `
+                        <div class="color-picker-wrapper">
+                            <input type="color" 
+                                   class="setting-input" 
+                                   id="${setting_key}" 
+                                   value="${setting_value}"
+                                   data-type="${setting_type}">
+                            <input type="text" 
+                                   class="setting-input color-hex-input" 
+                                   value="${setting_value}"
+                                   placeholder="#000000"
+                                   pattern="^#[0-9A-Fa-f]{6}$"
+                                   maxlength="7">
+                            <div class="color-preview" style="background: ${setting_value}"></div>
+                        </div>
+                    `;
+                } else {
+                    inputHtml = `
+                        <input type="text" 
+                               class="setting-input" 
+                               id="${setting_key}" 
+                               value="${this.escapeHtml(setting_value)}"
+                               data-type="${setting_type}">
+                    `;
+                }
+                break;
+                
+            case 'number':
+                inputHtml = `
+                    <input type="number" 
+                           class="setting-input" 
+                           id="${setting_key}" 
+                           value="${setting_value}"
+                           data-type="${setting_type}">
+                `;
+                break;
+                
+            case 'boolean':
+                inputHtml = `
+                    <div class="setting-toggle">
+                        <div class="toggle-switch ${setting_value === 'true' ? 'active' : ''}" 
+                             onclick="window.capstoneApp.toggleSetting('${setting_key}')">
+                            <div class="toggle-slider"></div>
+                        </div>
+                        <span>${setting_value === 'true' ? 'Enabled' : 'Disabled'}</span>
+                    </div>
+                    <input type="hidden" 
+                           id="${setting_key}" 
+                           value="${setting_value}"
+                           data-type="${setting_type}">
+                `;
+                break;
+                
+            case 'json':
+                if (setting_key.includes('domain_whitelist')) {
+                    const domains = JSON.parse(setting_value);
+                    inputHtml = `
+                        <div class="domain-manager">
+                            <div class="domain-list" id="${setting_key}_list">
+                                ${domains.map(d => `
+                                    <span class="domain-tag">
+                                        ${this.escapeHtml(d)}
+                                        <span class="remove" onclick="window.capstoneApp.removeDomain('${setting_key}', '${d}')">×</span>
+                                    </span>
+                                `).join('')}
+                            </div>
+                            <div class="add-domain-input">
+                                <input type="text" 
+                                       placeholder="Add domain (e.g., @example.edu)" 
+                                       id="${setting_key}_input"
+                                       class="setting-input">
+                                <button class="btn btn-sm btn-primary" 
+                                        onclick="window.capstoneApp.addDomain('${setting_key}')">
+                                    Add
+                                </button>
+                            </div>
+                            <input type="hidden" 
+                                   id="${setting_key}" 
+                                   value='${setting_value}'
+                                   data-type="${setting_type}">
+                        </div>
+                    `;
+                } else {
+                    // For other JSON fields, use textarea
+                    inputHtml = `
+                        <textarea class="setting-input" 
+                                  id="${setting_key}" 
+                                  rows="3"
+                                  data-type="${setting_type}">${this.escapeHtml(setting_value)}</textarea>
+                    `;
+                }
+                break;
+        }
+        
+        return `
+            <div class="setting-item">
+                <label class="setting-label" for="${setting_key}">
+                    ${this.formatSettingLabel(setting_key)}
+                </label>
+                <p class="setting-description">${description}</p>
+                ${inputHtml}
+            </div>
+        `;
+    }
+    
+    formatSettingLabel(key) {
+        return key.split('_').map(word => 
+            word.charAt(0).toUpperCase() + word.slice(1)
+        ).join(' ');
+    }
+    
+    attachSettingListeners() {
+        const inputs = document.querySelectorAll('.setting-input');
+        inputs.forEach(input => {
+            input.addEventListener('change', () => this.checkForChanges());
+            input.addEventListener('input', () => {
+                this.checkForChanges();
+                
+                // Update color preview if this is a color input
+                if (input.type === 'color') {
+                    const wrapper = input.parentElement;
+                    const preview = wrapper.querySelector('.color-preview');
+                    const hexInput = wrapper.querySelector('.color-hex-input');
+                    
+                    if (preview) {
+                        preview.style.background = input.value;
+                    }
+                    if (hexInput) {
+                        hexInput.value = input.value;
+                    }
+                }
+                
+                // Update color picker if this is a hex input
+                if (input.classList.contains('color-hex-input')) {
+                    const wrapper = input.parentElement;
+                    const colorPicker = wrapper.querySelector('input[type="color"]');
+                    const preview = wrapper.querySelector('.color-preview');
+                    
+                    if (/^#[0-9A-Fa-f]{6}$/.test(input.value)) {
+                        if (colorPicker) {
+                            colorPicker.value = input.value;
+                        }
+                        if (preview) {
+                            preview.style.background = input.value;
+                        }
+                    }
+                }
+            });
+        });
+        
+        // Add toggle listeners for boolean settings
+        const toggles = document.querySelectorAll('.toggle-switch');
+        toggles.forEach(toggle => {
+            toggle.addEventListener('click', () => {
+                const key = toggle.dataset.key;
+                if (key) {
+                    this.toggleSetting(key);
+                }
+            });
+        });
+    }
+    
+    checkForChanges() {
+        const hasChanges = this.hasUnsavedChanges();
+        const saveBar = document.querySelector('.settings-save-bar');
+        if (saveBar) {
+            saveBar.style.display = hasChanges ? 'flex' : 'none';
+        }
+    }
+    
+    hasUnsavedChanges() {
+        if (!this.currentSettings || !this.originalSettings) return false;
+        
+        for (const setting of this.currentSettings) {
+            const input = document.getElementById(setting.setting_key);
+            if (input) {
+                const currentValue = input.value;
+                const originalSetting = this.originalSettings.find(s => s.setting_key === setting.setting_key);
+                if (originalSetting && currentValue !== originalSetting.setting_value) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    
+    toggleSetting(key) {
+        const input = document.getElementById(key);
+        const toggle = input.previousElementSibling;
+        const currentValue = input.value === 'true';
+        const newValue = !currentValue;
+        
+        input.value = newValue.toString();
+        toggle.classList.toggle('active', newValue);
+        toggle.nextElementSibling.textContent = newValue ? 'Enabled' : 'Disabled';
+        
+        this.checkForChanges();
+    }
+    
+    addDomain(key) {
+        const input = document.getElementById(`${key}_input`);
+        const domain = input.value.trim();
+        
+        if (!domain) return;
+        
+        // Validate domain format
+        if (!domain.startsWith('@') && !domain.startsWith('*.')) {
+            this.showErrorToast('Invalid Format', 'Domain must start with @ or *.');
+            return;
+        }
+        
+        const hiddenInput = document.getElementById(key);
+        const domains = JSON.parse(hiddenInput.value);
+        
+        if (domains.includes(domain)) {
+            this.showWarningToast('Duplicate', 'This domain is already in the list');
+            return;
+        }
+        
+        domains.push(domain);
+        hiddenInput.value = JSON.stringify(domains);
+        
+        // Update UI
+        this.updateDomainList(key, domains);
+        input.value = '';
+        this.checkForChanges();
+    }
+    
+    removeDomain(key, domain) {
+        const hiddenInput = document.getElementById(key);
+        const domains = JSON.parse(hiddenInput.value);
+        const index = domains.indexOf(domain);
+        
+        if (index > -1) {
+            domains.splice(index, 1);
+            hiddenInput.value = JSON.stringify(domains);
+            this.updateDomainList(key, domains);
+            this.checkForChanges();
+        }
+    }
+    
+    updateDomainList(key, domains) {
+        const list = document.getElementById(`${key}_list`);
+        list.innerHTML = domains.map(d => `
+            <span class="domain-tag">
+                ${this.escapeHtml(d)}
+                <span class="remove" onclick="window.capstoneApp.removeDomain('${key}', '${d}')">×</span>
+            </span>
+        `).join('');
+    }
+    
+    async saveSettings() {
+        const updates = [];
+        
+        // Collect changed settings
+        for (const setting of this.currentSettings) {
+            const input = document.getElementById(setting.setting_key);
+            if (input) {
+                const currentValue = input.value;
+                const originalSetting = this.originalSettings.find(s => s.setting_key === setting.setting_key);
+                
+                if (originalSetting && currentValue !== originalSetting.setting_value) {
+                    updates.push({
+                        key: setting.setting_key,
+                        value: setting.setting_type === 'number' ? parseFloat(currentValue) : 
+                               setting.setting_type === 'boolean' ? currentValue === 'true' :
+                               setting.setting_type === 'json' ? JSON.parse(currentValue) :
+                               currentValue
+                    });
+                }
+            }
+        }
+        
+        if (updates.length === 0) {
+            this.showInfoToast('No Changes', 'No settings have been modified');
+            return;
+        }
+        
+        try {
+            const response = await fetch('/api/admin/settings/update', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${window.authManager.getToken()}`
+                },
+                credentials: 'include',
+                body: JSON.stringify({ updates })
+            });
+            
+            if (!response.ok) throw new Error('Failed to save settings');
+            
+            this.showSuccessToast('Settings Saved', 'Your changes have been saved successfully');
+            
+            // Update original settings
+            this.originalSettings = JSON.parse(JSON.stringify(this.currentSettings));
+            this.checkForChanges();
+            
+            // If branding was updated, refresh the page to apply changes
+            if (updates.some(u => ['site_title', 'primary_color', 'secondary_color'].includes(u.key))) {
+                setTimeout(() => location.reload(), 1000);
+            }
+            
+        } catch (error) {
+            console.error('Error saving settings:', error);
+            this.showErrorToast('Error', 'Failed to save settings');
+        }
+    }
+    
+    resetSettings() {
+        if (!confirm('Are you sure you want to reset all changes?')) return;
+        
+        // Reset all inputs to original values
+        for (const setting of this.originalSettings) {
+            const input = document.getElementById(setting.setting_key);
+            if (input) {
+                input.value = setting.setting_value;
+                
+                // Handle special cases
+                if (setting.setting_type === 'boolean') {
+                    const toggle = input.previousElementSibling;
+                    const isActive = setting.setting_value === 'true';
+                    toggle.classList.toggle('active', isActive);
+                    toggle.nextElementSibling.textContent = isActive ? 'Enabled' : 'Disabled';
+                } else if (setting.setting_type === 'json' && setting.setting_key.includes('domain_whitelist')) {
+                    this.updateDomainList(setting.setting_key, JSON.parse(setting.setting_value));
+                }
+            }
+        }
+        
+        this.checkForChanges();
+    }
+    
+    async exportSettings() {
+        try {
+            const response = await fetch('/api/admin/settings/export', {
+                headers: { 'Authorization': `Bearer ${window.authManager.getToken()}` },
+                credentials: 'include'
+            });
+            
+            if (!response.ok) throw new Error('Failed to export settings');
+            
+            const settings = await response.json();
+            const blob = new Blob([JSON.stringify(settings, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `capstone-settings-${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            this.showSuccessToast('Export Complete', 'Settings have been exported');
+            
+        } catch (error) {
+            console.error('Error exporting settings:', error);
+            this.showErrorToast('Error', 'Failed to export settings');
+        }
+    }
+    
+    async importSettings() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        
+        input.onchange = async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            try {
+                const text = await file.text();
+                const settings = JSON.parse(text);
+                
+                if (!confirm('This will overwrite all current settings. Continue?')) return;
+                
+                const response = await fetch('/api/admin/settings/import', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${window.authManager.getToken()}`
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify(settings)
+                });
+                
+                if (!response.ok) throw new Error('Failed to import settings');
+                
+                this.showSuccessToast('Import Complete', 'Settings have been imported. Page will reload.');
+                setTimeout(() => location.reload(), 1500);
+                
+            } catch (error) {
+                console.error('Error importing settings:', error);
+                this.showErrorToast('Error', 'Failed to import settings. Please check the file format.');
+            }
+        };
+        
+        input.click();
+    }
+
+    // Reset all settings to factory defaults
+    async resetAllSettings() {
+        try {
+            // Show a serious confirmation dialog
+            const confirmed = confirm(
+                '⚠️ WARNING: This will reset ALL settings to factory defaults!\n\n' +
+                'This action will:\n' +
+                '• Reset all branding settings\n' +
+                '• Reset authentication configuration\n' +
+                '• Reset feature toggles\n' +
+                '• Reset business rules\n' +
+                '• Reset privacy settings\n\n' +
+                'This cannot be undone without a backup.\n\n' +
+                'Are you absolutely sure you want to continue?'
+            );
+
+            if (!confirmed) {
+                return;
+            }
+
+            // Second confirmation with type requirement
+            const confirmText = prompt(
+                'To confirm, please type: RESET_ALL_SETTINGS\n\n' +
+                'This is your final warning - this action cannot be undone!'
+            );
+
+            if (confirmText !== 'RESET_ALL_SETTINGS') {
+                this.showInfoToast('Reset Cancelled', 'Confirmation text did not match');
+                return;
+            }
+
+            // Show loading state
+            this.showInfoToast('Resetting Settings', 'Resetting all settings to defaults...');
+
+            const headers = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${window.authManager.getToken()}`
+            };
+
+            const response = await fetch('/api/admin/settings/reset', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    confirm: 'RESET_ALL_SETTINGS'
+                })
+            });
+
+            const result = await response.json();
+
+            if (response.ok && result.success) {
+                this.showSuccessToast(
+                    'Settings Reset Complete',
+                    `${result.details.successful} settings restored to defaults. Page will reload.`
+                );
+                
+                // Log the action
+                console.log('Settings reset result:', result);
+                
+                // Reload the page to show updated settings
+                setTimeout(() => {
+                    window.location.reload();
+                }, 2000);
+                
+            } else {
+                throw new Error(result.error || 'Failed to reset settings');
+            }
+
+        } catch (error) {
+            console.error('Error resetting settings:', error);
+            this.showErrorToast('Reset Failed', 'Failed to reset settings to defaults');
+        }
+    }
+    
+    async loadBrandingSettings() {
+        try {
+            // Load public branding settings
+            const response = await fetch('/api/settings/branding');
+            if (!response.ok) return; // Fail silently if settings not available
+            
+            const settings = await response.json();
+            
+            // Apply site title
+            if (settings.site_title) {
+                document.title = settings.site_title;
+                const logoElement = document.querySelector('.logo-text');
+                if (logoElement) {
+                    logoElement.textContent = settings.site_title;
+                }
+            }
+            
+            // Apply site tagline
+            if (settings.site_tagline) {
+                const subtitleElement = document.querySelector('.hero-subtitle');
+                if (subtitleElement) {
+                    subtitleElement.textContent = settings.site_tagline;
+                }
+            }
+            
+            // Apply footer text
+            if (settings.footer_text) {
+                const footerElement = document.querySelector('.footer-content p:first-child');
+                if (footerElement) {
+                    footerElement.textContent = settings.footer_text;
+                }
+            }
+            
+            // Apply colors if provided
+            if (settings.primary_color) {
+                document.documentElement.style.setProperty('--primary-color', settings.primary_color);
+            }
+            if (settings.secondary_color) {
+                document.documentElement.style.setProperty('--secondary-color', settings.secondary_color);
+            }
+            
+        } catch (error) {
+            // Fail silently - branding is not critical
+            console.debug('Could not load branding settings:', error);
+        }
+    }
+    
+    async loadBusinessRules() {
+        try {
+            // Load business rules for filters
+            const response = await fetch('/api/settings/business-rules');
+            if (!response.ok) return;
+            
+            const rules = await response.json();
+            
+            // Update semester filter
+            if (rules.academic_terms) {
+                const semesterFilter = document.getElementById('semesterFilter');
+                if (semesterFilter) {
+                    // Keep the "All Semesters" option
+                    const allOption = semesterFilter.querySelector('option[value=""]');
+                    semesterFilter.innerHTML = '';
+                    if (allOption) semesterFilter.appendChild(allOption);
+                    
+                    // Add configured semester options
+                    rules.academic_terms.forEach(term => {
+                        const option = document.createElement('option');
+                        // Convert display name to value (e.g., "Semester 1" -> "semester1")
+                        const value = term.toLowerCase().replace(/\s+/g, '');
+                        option.value = value;
+                        option.textContent = term;
+                        semesterFilter.appendChild(option);
+                    });
+                }
+            }
+            
+            // Update project type filter
+            if (rules.project_types) {
+                const projectTypeFilter = document.getElementById('projectTypeFilter');
+                if (projectTypeFilter) {
+                    // Keep the "All Project Types" option
+                    const allOption = projectTypeFilter.querySelector('option[value=""]');
+                    projectTypeFilter.innerHTML = '';
+                    if (allOption) projectTypeFilter.appendChild(allOption);
+                    
+                    // Add configured project types
+                    rules.project_types.forEach(type => {
+                        const option = document.createElement('option');
+                        option.value = type;
+                        option.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+                        projectTypeFilter.appendChild(option);
+                    });
+                }
+            }
+            
+            // Store rules for later use (e.g., in forms)
+            this.businessRules = rules;
+            
+        } catch (error) {
+            console.debug('Could not load business rules:', error);
+        }
     }
 
     closeModal() {
@@ -2895,13 +4269,19 @@ class CapstoneApp {
         }
     }
 
-    checkAuthStatus() {
+    async checkAuthStatus() {
         console.log('checkAuthStatus called, authManager:', window.authManager);
         
-        // If authManager is not ready yet, try again shortly
+        // Wait for authManager to be ready
+        let retries = 0;
+        while (!window.authManager && retries < 50) {
+            console.log('AuthManager not ready, waiting...');
+            await new Promise(resolve => setTimeout(resolve, 100));
+            retries++;
+        }
+        
         if (!window.authManager) {
-            console.log('AuthManager not ready, retrying in 100ms...');
-            setTimeout(() => this.checkAuthStatus(), 100);
+            console.error('AuthManager failed to initialize');
             return;
         }
         
@@ -2923,6 +4303,8 @@ class CapstoneApp {
         const userInfo = document.getElementById('userInfo');
         const logoutBtn = document.getElementById('logoutBtn');
         const studentDashboardLink = document.getElementById('studentDashboardLink');
+        const clientDashboardLink = document.getElementById('clientDashboardLink');
+        const adminDashboardLink = document.getElementById('adminDashboardLink');
 
         if (userStatus && authNavLink && userInfo && this.currentUser) {
             // Hide login link
@@ -2936,13 +4318,18 @@ class CapstoneApp {
             const displayName = user.fullName || user.organizationName || user.email;
             userInfo.textContent = `${displayName} (${user.type})`;
             
-            // Show/hide dashboard link based on user type
-            if (studentDashboardLink) {
-                if (user.type === 'student') {
-                    studentDashboardLink.style.display = 'block';
-                } else {
-                    studentDashboardLink.style.display = 'none';
-                }
+            // Hide all dashboard links first
+            if (studentDashboardLink) studentDashboardLink.style.display = 'none';
+            if (clientDashboardLink) clientDashboardLink.style.display = 'none';
+            if (adminDashboardLink) adminDashboardLink.style.display = 'none';
+            
+            // Show the appropriate dashboard link based on user type
+            if (user.type === 'student' && studentDashboardLink) {
+                studentDashboardLink.style.display = 'block';
+            } else if (user.type === 'client' && clientDashboardLink) {
+                clientDashboardLink.style.display = 'block';
+            } else if (user.type === 'admin' && adminDashboardLink) {
+                adminDashboardLink.style.display = 'block';
             }
             
             // Setup logout button
@@ -2967,6 +4354,8 @@ class CapstoneApp {
         const userStatus = document.getElementById('userStatus');
         const authNavLink = document.getElementById('authNavLink');
         const studentDashboardLink = document.getElementById('studentDashboardLink');
+        const clientDashboardLink = document.getElementById('clientDashboardLink');
+        const adminDashboardLink = document.getElementById('adminDashboardLink');
 
         if (userStatus && authNavLink) {
             // Show login link
@@ -2975,10 +4364,10 @@ class CapstoneApp {
             // Hide user status
             userStatus.style.display = 'none';
             
-            // Hide dashboard link
-            if (studentDashboardLink) {
-                studentDashboardLink.style.display = 'none';
-            }
+            // Hide all dashboard links
+            if (studentDashboardLink) studentDashboardLink.style.display = 'none';
+            if (clientDashboardLink) clientDashboardLink.style.display = 'none';
+            if (adminDashboardLink) adminDashboardLink.style.display = 'none';
         }
     }
 
@@ -3127,8 +4516,553 @@ class CapstoneApp {
         this.showToast('info', 'Gallery selection cleared');
     }
 
-    showAddToGalleryModal() {
-        this.showToast('info', 'Add to Gallery feature coming soon!', 'Complete projects first, then they can be added to the gallery.');
+    async showAddToGalleryModal() {
+        try {
+            // First, fetch completed projects and existing gallery items
+            const [projectsResponse, galleryResponse] = await Promise.all([
+                fetch('/api/admin/projects/all?status=completed', {
+                    headers: { 'Authorization': `Bearer ${window.authManager.getToken()}` },
+                    credentials: 'include'
+                }),
+                fetch('/api/gallery/admin/all', {
+                    headers: { 'Authorization': `Bearer ${window.authManager.getToken()}` },
+                    credentials: 'include'
+                })
+            ]);
+            
+            if (!projectsResponse.ok) throw new Error('Failed to fetch completed projects');
+            if (!galleryResponse.ok) throw new Error('Failed to fetch gallery items');
+            
+            const projectsData = await projectsResponse.json();
+            const galleryData = await galleryResponse.json();
+            
+            const completedProjects = projectsData.projects || [];
+            const galleryItems = galleryData.items || [];
+            
+            // Filter out projects that are already in the gallery (match by title and year)
+            const currentYear = new Date().getFullYear();
+            const availableProjects = completedProjects.filter(project => {
+                return !galleryItems.some(galleryItem => 
+                    galleryItem.title === project.title && 
+                    galleryItem.year === currentYear
+                );
+            });
+            
+            if (availableProjects.length === 0) {
+                this.showWarningToast('No Projects Available', 'No completed projects are available to add to the gallery.');
+                return;
+            }
+            
+            // Show modal with project selection
+            this.showAddToGalleryForm(availableProjects);
+        } catch (error) {
+            console.error('Error loading completed projects:', error);
+            this.showErrorToast('Error', 'Failed to load completed projects');
+        }
+    }
+
+    async editGalleryItem(itemId) {
+        try {
+            // Get the item from the current gallery items in memory
+            const galleryItems = this.galleryManagementItems || [];
+            const item = galleryItems.find(g => g.id === itemId);
+            
+            if (!item) {
+                // If not found in memory, fetch from API
+                const response = await fetch(`/api/gallery/${itemId}`, {
+                    headers: { 'Authorization': `Bearer ${window.authManager.getToken()}` },
+                    credentials: 'include'
+                });
+                
+                if (!response.ok) throw new Error('Failed to fetch gallery item');
+                
+                const data = await response.json();
+                this.showEditGalleryModal(data.galleryItem);
+            } else {
+                this.showEditGalleryModal(item);
+            }
+            
+        } catch (error) {
+            console.error('Error fetching gallery item:', error);
+            this.showErrorToast('Error', 'Failed to load gallery item for editing');
+        }
+    }
+
+    async deleteGalleryItem(itemId) {
+        if (!confirm('Are you sure you want to delete this gallery item? This action cannot be undone.')) {
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/gallery/admin/${itemId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${window.authManager.getToken()}` },
+                credentials: 'include'
+            });
+            
+            if (!response.ok) throw new Error('Failed to delete gallery item');
+            
+            this.showSuccessToast('Gallery Item Deleted', 'The gallery item has been permanently deleted.');
+            
+            // Refresh gallery management
+            await this.loadGalleryManagement();
+            
+            // Also refresh public gallery if it's currently visible
+            if (this.currentSection === 'gallery') {
+                await this.loadGallery();
+            }
+            
+        } catch (error) {
+            console.error('Error deleting gallery item:', error);
+            this.showErrorToast('Error', 'Failed to delete gallery item');
+        }
+    }
+
+    async approveGalleryItem(itemId) {
+        try {
+            const response = await fetch(`/api/gallery/admin/${itemId}/status`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${window.authManager.getToken()}`
+                },
+                credentials: 'include',
+                body: JSON.stringify({ status: 'approved' })
+            });
+            
+            if (!response.ok) throw new Error('Failed to approve gallery item');
+            
+            this.showSuccessToast('Gallery Item Approved', 'The gallery item is now published and visible to the public.');
+            
+            // Refresh gallery management
+            await this.loadGalleryManagement();
+            
+            // Also refresh public gallery if it's currently visible
+            if (this.currentSection === 'gallery') {
+                await this.loadGallery();
+            }
+            
+        } catch (error) {
+            console.error('Error approving gallery item:', error);
+            this.showErrorToast('Error', 'Failed to approve gallery item');
+        }
+    }
+
+    async rejectGalleryItem(itemId) {
+        const reason = prompt('Optional: Provide a reason for rejection:') || '';
+        
+        try {
+            const response = await fetch(`/api/gallery/admin/${itemId}/status`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${window.authManager.getToken()}`
+                },
+                credentials: 'include',
+                body: JSON.stringify({ 
+                    status: 'rejected',
+                    rejection_reason: reason
+                })
+            });
+            
+            if (!response.ok) throw new Error('Failed to reject gallery item');
+            
+            this.showWarningToast('Gallery Item Rejected', 'The gallery item has been rejected and will not be published.');
+            
+            // Refresh gallery management
+            await this.loadGalleryManagement();
+            
+            // Also refresh public gallery if it's currently visible
+            if (this.currentSection === 'gallery') {
+                await this.loadGallery();
+            }
+            
+        } catch (error) {
+            console.error('Error rejecting gallery item:', error);
+            this.showErrorToast('Error', 'Failed to reject gallery item');
+        }
+    }
+
+    async unapproveGalleryItem(itemId) {
+        if (!confirm('Are you sure you want to unapprove this gallery item? It will be removed from the public gallery.')) {
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/gallery/admin/${itemId}/status`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${window.authManager.getToken()}`
+                },
+                credentials: 'include',
+                body: JSON.stringify({ status: 'pending' })
+            });
+            
+            if (!response.ok) throw new Error('Failed to unapprove gallery item');
+            
+            this.showWarningToast('Gallery Item Unapproved', 'The gallery item has been moved back to pending status.');
+            
+            // Refresh gallery management
+            await this.loadGalleryManagement();
+            
+            // Also refresh public gallery if it's currently visible
+            if (this.currentSection === 'gallery') {
+                await this.loadGallery();
+            }
+            
+        } catch (error) {
+            console.error('Error unapproving gallery item:', error);
+            this.showErrorToast('Error', 'Failed to unapprove gallery item');
+        }
+    }
+
+    showEditGalleryModal(item) {
+        const modal = document.getElementById('modal');
+        const modalBody = document.getElementById('modalBody');
+        
+        modalBody.innerHTML = `
+            <h2>Edit Gallery Item</h2>
+            <form id="editGalleryForm" class="gallery-form">
+                <div class="form-group">
+                    <label for="editTitle">Title *</label>
+                    <input type="text" id="editTitle" value="${this.escapeHtml(item.title)}" required>
+                </div>
+                <div class="form-group">
+                    <label for="editDescription">Description *</label>
+                    <textarea id="editDescription" rows="4" required>${this.escapeHtml(item.description)}</textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="editYear">Year *</label>
+                        <input type="number" id="editYear" value="${item.year}" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editCategory">Category</label>
+                        <input type="text" id="editCategory" value="${this.escapeHtml(item.category || '')}">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="editClientName">Client/Organization</label>
+                    <input type="text" id="editClientName" value="${this.escapeHtml(item.client_name || '')}">
+                </div>
+                <div class="form-group">
+                    <label for="editTeamMembers">Team Members</label>
+                    <textarea id="editTeamMembers" rows="2">${this.escapeHtml(item.team_members || '')}</textarea>
+                </div>
+                <div class="form-group">
+                    <label for="editOutcomes">Outcomes/Impact</label>
+                    <textarea id="editOutcomes" rows="3">${this.escapeHtml(item.outcomes || '')}</textarea>
+                </div>
+                <div class="form-group">
+                    <label for="editImageUrl">Image URL</label>
+                    <input type="url" id="editImageUrl" value="${this.escapeHtml(item.image_urls && item.image_urls[0] || '')}">
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                </div>
+            </form>
+        `;
+        
+        const form = document.getElementById('editGalleryForm');
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await this.updateGalleryItem(item.id);
+        });
+        
+        modal.style.display = 'block';
+    }
+
+    async updateGalleryItem(itemId) {
+        try {
+            const updateData = {
+                title: document.getElementById('editTitle').value,
+                description: document.getElementById('editDescription').value,
+                year: parseInt(document.getElementById('editYear').value),
+                category: document.getElementById('editCategory').value,
+                clientName: document.getElementById('editClientName').value,
+                teamMembers: document.getElementById('editTeamMembers').value,
+                outcomes: document.getElementById('editOutcomes').value,
+                imageUrls: document.getElementById('editImageUrl').value ? [document.getElementById('editImageUrl').value] : []
+            };
+            
+            const response = await fetch(`/api/gallery/admin/${itemId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${window.authManager.getToken()}`
+                },
+                credentials: 'include',
+                body: JSON.stringify(updateData)
+            });
+            
+            if (!response.ok) throw new Error('Failed to update gallery item');
+            
+            this.showSuccessToast('Gallery Item Updated', 'The gallery item has been successfully updated.');
+            this.closeModal();
+            
+            // Refresh gallery management
+            await this.loadGalleryManagement();
+            
+            // Also refresh public gallery if it's currently visible
+            if (this.currentSection === 'gallery') {
+                await this.loadGallery();
+            }
+            
+        } catch (error) {
+            console.error('Error updating gallery item:', error);
+            this.showErrorToast('Error', 'Failed to update gallery item');
+        }
+    }
+    
+    showAddToGalleryForm(projects) {
+        const modal = document.getElementById('modal');
+        const modalBody = document.getElementById('modalBody');
+        
+        modalBody.innerHTML = `
+            <h2>Add Project to Gallery</h2>
+            <form id="addToGalleryForm" class="gallery-form">
+                <div class="form-group">
+                    <label for="projectSelect">Select Completed Project *</label>
+                    <select id="projectSelect" required>
+                        <option value="">Choose a project...</option>
+                        ${projects.map(project => `
+                            <option value="${project.id}">
+                                ${this.escapeHtml(project.title)} - ${this.escapeHtml(project.organization_name)}
+                            </option>
+                        `).join('')}
+                    </select>
+                </div>
+                
+                <div id="projectDetails" style="display: none;">
+                    <div class="form-group">
+                        <label for="galleryDescription">Gallery Description *</label>
+                        <textarea id="galleryDescription" rows="4" required 
+                                  placeholder="Brief description highlighting the project's success and impact..."></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="teamMembers">Team Members *</label>
+                        <input type="text" id="teamMembers" required 
+                               placeholder="e.g., John Doe, Jane Smith, Bob Johnson">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="outcomes">Project Outcomes *</label>
+                        <textarea id="outcomes" rows="3" required 
+                                  placeholder="Key achievements, metrics, and impact..."></textarea>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="projectYear">Year *</label>
+                            <input type="number" id="projectYear" required 
+                                   min="2020" max="${new Date().getFullYear()}" 
+                                   value="${new Date().getFullYear()}">
+                        </div>
+                        <div class="form-group">
+                            <label for="category">Category *</label>
+                            <select id="category" required>
+                                <option value="">Select category...</option>
+                                <option value="Software Development">Software Development</option>
+                                <option value="Mobile Development">Mobile Development</option>
+                                <option value="IoT & Machine Learning">IoT & Machine Learning</option>
+                                <option value="Blockchain">Blockchain</option>
+                                <option value="Virtual Reality">Virtual Reality</option>
+                                <option value="Data Analytics">Data Analytics</option>
+                                <option value="Web Development">Web Development</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="imageUrl">Image URL (optional)</label>
+                        <input type="url" id="imageUrl" 
+                               placeholder="https://example.com/project-image.jpg">
+                    </div>
+                </div>
+                
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="submitGalleryBtn" style="display: none;">
+                        Add to Gallery
+                    </button>
+                </div>
+            </form>
+        `;
+        
+        // Show project details when a project is selected
+        const projectSelect = document.getElementById('projectSelect');
+        const projectDetails = document.getElementById('projectDetails');
+        const submitBtn = document.getElementById('submitGalleryBtn');
+        
+        projectSelect.addEventListener('change', (e) => {
+            if (e.target.value) {
+                const selectedProject = projects.find(p => p.id === parseInt(e.target.value));
+                if (selectedProject) {
+                    // Pre-fill description if available
+                    document.getElementById('galleryDescription').value = selectedProject.description || '';
+                    projectDetails.style.display = 'block';
+                    submitBtn.style.display = 'inline-block';
+                }
+            } else {
+                projectDetails.style.display = 'none';
+                submitBtn.style.display = 'none';
+            }
+        });
+        
+        // Handle form submission
+        const form = document.getElementById('addToGalleryForm');
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await this.submitGalleryItem(projects);
+        });
+        
+        modal.style.display = 'block';
+    }
+    
+    async submitGalleryItem(projects) {
+        const projectId = document.getElementById('projectSelect').value;
+        const selectedProject = projects.find(p => p.id === parseInt(projectId));
+        
+        const galleryData = {
+            galleryTitle: selectedProject.title,
+            galleryDescription: document.getElementById('galleryDescription').value,
+            category: document.getElementById('category').value,
+            teamMembers: document.getElementById('teamMembers').value,
+            outcomes: document.getElementById('outcomes').value,
+            imageUrls: document.getElementById('imageUrl').value ? [document.getElementById('imageUrl').value] : []
+        };
+        
+        try {
+            const response = await fetch('/api/gallery/admin/from-project/' + projectId, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${window.authManager.getToken()}`
+                },
+                credentials: 'include',
+                body: JSON.stringify(galleryData)
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.message || 'Failed to add to gallery');
+            }
+            
+            this.showSuccessToast('Success', 'Project added to gallery successfully!');
+            this.closeModal();
+            
+            // Reload gallery if we're on that tab
+            if (document.querySelector('.admin-tab[data-tab="gallery"].active')) {
+                this.loadGalleryManagement();
+            }
+        } catch (error) {
+            console.error('Error adding to gallery:', error);
+            this.showErrorToast('Error', error.message || 'Failed to add project to gallery');
+        }
+    }
+
+    async loadGalleryManagement() {
+        try {
+            // For now, just clear the loading messages
+            const statsContainer = document.getElementById('galleryStats');
+            const itemsContainer = document.getElementById('galleryItemsList');
+            
+            if (statsContainer) {
+                statsContainer.innerHTML = `
+                    <div class="stat-card">
+                        <h3>0</h3>
+                        <p>Total Gallery Items</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>0</h3>
+                        <p>Pending Review</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>0</h3>
+                        <p>Published</p>
+                    </div>
+                `;
+            }
+            
+            if (itemsContainer) {
+                // Fetch all gallery items from admin endpoint (includes pending, approved, rejected)
+                const response = await fetch('/api/gallery/admin/all', {
+                    headers: { 'Authorization': `Bearer ${window.authManager.getToken()}` },
+                    credentials: 'include'
+                });
+                const data = await response.json();
+                console.log('Gallery admin response:', data);
+                const galleryItems = data.gallery || [];
+                
+                // Store in memory for edit functionality
+                this.galleryManagementItems = galleryItems;
+                
+                // Update stats with actual counts from API
+                if (statsContainer && data.stats) {
+                    statsContainer.innerHTML = `
+                        <div class="stat-card">
+                            <h3>${data.stats.total || 0}</h3>
+                            <p>Total Gallery Items</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3>${data.stats.pending || 0}</h3>
+                            <p>Pending Review</p>
+                        </div>
+                        <div class="stat-card">
+                            <h3>${data.stats.approved || 0}</h3>
+                            <p>Published</p>
+                        </div>
+                    `;
+                }
+                
+                if (galleryItems.length > 0) {
+                    itemsContainer.innerHTML = galleryItems.map(item => `
+                        <div class="gallery-card admin-gallery-card">
+                            <div class="gallery-image">
+                                ${item.image_urls && item.image_urls.length > 0 ? `<img src="${item.image_urls[0]}" alt="${this.escapeHtml(item.title)}">` : '📷 No Image'}
+                            </div>
+                            <div class="gallery-content">
+                                <h3 class="gallery-title">${this.escapeHtml(item.title)}</h3>
+                                <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                                    <span class="gallery-year">${item.year}</span>
+                                    <span class="status-indicator status-${item.status}">${item.status}</span>
+                                    <span style="color: #666;">• ${item.category}</span>
+                                </div>
+                                <p style="margin-bottom: 10px;">${this.escapeHtml(item.description || 'No description available')}</p>
+                                <p style="font-size: 0.9em; color: #666;">
+                                    <strong>Client:</strong> ${this.escapeHtml(item.client_name)}<br>
+                                    <strong>Team:</strong> ${this.escapeHtml(item.team_members)}
+                                </p>
+                                <div class="admin-actions" style="margin-top: 15px;">
+                                    ${item.status === 'pending' ? `
+                                        <button class="btn btn-success btn-sm" onclick="approveGalleryItem(${item.id})">Approve</button>
+                                        <button class="btn btn-warning btn-sm" onclick="rejectGalleryItem(${item.id})">Reject</button>
+                                    ` : item.status === 'approved' ? `
+                                        <button class="btn btn-warning btn-sm" onclick="unapproveGalleryItem(${item.id})">Unapprove</button>
+                                    ` : item.status === 'rejected' ? `
+                                        <button class="btn btn-success btn-sm" onclick="approveGalleryItem(${item.id})">Approve</button>
+                                    ` : ''}
+                                    <button class="btn btn-outline btn-sm" onclick="editGalleryItem(${item.id})">Edit</button>
+                                    <button class="btn btn-danger btn-sm" onclick="deleteGalleryItem(${item.id})">Delete</button>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    itemsContainer.innerHTML = '<div class="admin-empty"><h4>No gallery items found</h4><p>Gallery items will appear here once projects are completed and added to the gallery.</p></div>';
+                }
+            }
+        } catch (error) {
+            console.error('Error loading gallery management:', error);
+            const itemsContainer = document.getElementById('galleryItemsList');
+            if (itemsContainer) {
+                itemsContainer.innerHTML = '<div class="error">Failed to load gallery items</div>';
+            }
+        }
     }
 }
 
@@ -3213,6 +5147,16 @@ function showCreateProject() {
     app.showCreateProjectModal();
 }
 
+function editGalleryItem(id) {
+    app.showToast('info', 'Edit gallery item feature coming soon!');
+}
+
+function deleteGalleryItem(id) {
+    if (confirm('Are you sure you want to delete this gallery item?')) {
+        app.showToast('warning', 'Delete gallery item feature coming soon!');
+    }
+}
+
 // Initialize the application
 const app = new CapstoneApp();
 
@@ -3233,6 +5177,14 @@ window.expressInterest = (projectId, event) => app.expressInterest(projectId, ev
 window.showAuthTab = (tab) => app.showAuthTab(tab);
 window.approveProject = (projectId) => app.approveProject(projectId);
 window.rejectProject = (projectId) => app.rejectProject(projectId);
+window.completeProject = (projectId) => app.completeProject(projectId);
+window.archiveProject = (projectId) => app.archiveProject(projectId);
+window.deactivateProject = (projectId) => app.deactivateProject(projectId);
+window.editGalleryItem = (itemId) => app.editGalleryItem(itemId);
+window.deleteGalleryItem = (itemId) => app.deleteGalleryItem(itemId);
+window.approveGalleryItem = (itemId) => app.approveGalleryItem(itemId);
+window.rejectGalleryItem = (itemId) => app.rejectGalleryItem(itemId);
+window.unapproveGalleryItem = (itemId) => app.unapproveGalleryItem(itemId);
 window.showAdminTab = (tab) => app.showAdminTab(tab);
 
 // Admin bulk operations
@@ -3248,6 +5200,9 @@ window.bulkRejectGalleryItems = () => app.bulkRejectGalleryItems();
 window.bulkDeleteGalleryItems = () => app.bulkDeleteGalleryItems();
 window.clearGallerySelection = () => app.clearGallerySelection();
 window.showAddToGalleryModal = () => app.showAddToGalleryModal();
+
+// Settings functions
+window.resetAllSettings = () => app.resetAllSettings();
 
 // Listen for postMessage events for cross-script communication
 window.addEventListener('message', function(event) {

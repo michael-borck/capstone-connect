@@ -81,7 +81,11 @@ class Database {
         return new Promise((resolve, reject) => {
             this.db.run(sql, params, function(err) {
                 if (err) {
-                    console.error('Run error:', err);
+                    // Only log errors that aren't expected duplicates during setup
+                    if (!err.message.includes('duplicate column name') && 
+                        !err.message.includes('UNIQUE constraint failed')) {
+                        console.error('Run error:', err);
+                    }
                     reject(err);
                     return;
                 }
@@ -614,6 +618,232 @@ class Database {
             pending: stats[1][0].pending,
             years: stats[2][0].years,
             categories: stats[3][0].categories
+        };
+    }
+
+    // Configuration Settings Methods
+    async getSettings(category = null) {
+        let sql = 'SELECT * FROM config_settings';
+        const params = [];
+        
+        if (category) {
+            sql += ' WHERE category = ?';
+            params.push(category);
+        }
+        
+        sql += ' ORDER BY category, setting_key';
+        return this.query(sql, params);
+    }
+
+    async getSetting(key) {
+        const sql = 'SELECT * FROM config_settings WHERE setting_key = ?';
+        const result = await this.get(sql, [key]);
+        
+        if (!result) return null;
+        
+        // Parse value based on type
+        let value = result.setting_value;
+        switch (result.setting_type) {
+            case 'number':
+                value = parseFloat(value);
+                break;
+            case 'boolean':
+                value = value === 'true';
+                break;
+            case 'json':
+                try {
+                    value = JSON.parse(value);
+                } catch (e) {
+                    console.error(`Failed to parse JSON setting ${key}:`, e);
+                }
+                break;
+        }
+        
+        return {
+            ...result,
+            value
+        };
+    }
+
+    async updateSetting(key, value, adminId) {
+        // Get current setting to check type
+        const current = await this.getSetting(key);
+        if (!current) {
+            throw new Error(`Setting ${key} not found`);
+        }
+        
+        // Convert value to string for storage
+        let stringValue = value;
+        switch (current.setting_type) {
+            case 'number':
+                if (typeof value !== 'number') {
+                    throw new Error(`Setting ${key} must be a number`);
+                }
+                stringValue = value.toString();
+                break;
+            case 'boolean':
+                if (typeof value !== 'boolean') {
+                    throw new Error(`Setting ${key} must be a boolean`);
+                }
+                stringValue = value.toString();
+                break;
+            case 'json':
+                stringValue = JSON.stringify(value);
+                break;
+            case 'string':
+                stringValue = value.toString();
+                break;
+        }
+        
+        const sql = `
+            UPDATE config_settings 
+            SET setting_value = ?, 
+                updated_at = CURRENT_TIMESTAMP,
+                updated_by = ?
+            WHERE setting_key = ?
+        `;
+        
+        return this.run(sql, [stringValue, adminId, key]);
+    }
+
+    async createSetting(key, value, type, category, description, adminId) {
+        // Validate type and category
+        const validTypes = ['string', 'number', 'boolean', 'json'];
+        const validCategories = ['branding', 'auth', 'features', 'rules', 'privacy'];
+        
+        if (!validTypes.includes(type)) {
+            throw new Error('Invalid setting type');
+        }
+        
+        if (!validCategories.includes(category)) {
+            throw new Error('Invalid setting category');
+        }
+        
+        // Convert value to string
+        let stringValue = value;
+        if (type === 'json') {
+            stringValue = JSON.stringify(value);
+        } else {
+            stringValue = value.toString();
+        }
+        
+        const sql = `
+            INSERT INTO config_settings 
+            (setting_key, setting_value, setting_type, category, description, updated_by)
+            VALUES (?, ?, ?, ?, ?, ?)
+        `;
+        
+        return this.run(sql, [key, stringValue, type, category, description, adminId]);
+    }
+
+    async deleteSetting(key) {
+        const sql = 'DELETE FROM config_settings WHERE setting_key = ?';
+        return this.run(sql, [key]);
+    }
+
+    // Helper method to get all settings as a key-value object
+    async getSettingsObject() {
+        const settings = await this.getSettings();
+        const result = {};
+        
+        for (const setting of settings) {
+            let value = setting.setting_value;
+            
+            // Parse based on type
+            switch (setting.setting_type) {
+                case 'number':
+                    value = parseFloat(value);
+                    break;
+                case 'boolean':
+                    value = value === 'true';
+                    break;
+                case 'json':
+                    try {
+                        value = JSON.parse(value);
+                    } catch (e) {
+                        console.error(`Failed to parse JSON setting ${setting.setting_key}:`, e);
+                    }
+                    break;
+            }
+            
+            result[setting.setting_key] = value;
+        }
+        
+        return result;
+    }
+
+    // Reset all settings to their default values
+    async resetSettingsToDefaults(adminId) {
+        const defaultSettings = this.getDefaultSettings();
+        
+        // Update each setting to its default value
+        const results = [];
+        for (const [key, data] of Object.entries(defaultSettings)) {
+            try {
+                // Parse the value based on type before updating
+                let parsedValue = data.value;
+                switch (data.type) {
+                    case 'number':
+                        parsedValue = parseFloat(data.value);
+                        break;
+                    case 'boolean':
+                        parsedValue = data.value === 'true';
+                        break;
+                    case 'json':
+                        parsedValue = JSON.parse(data.value);
+                        break;
+                    // string values don't need parsing
+                }
+                
+                await this.updateSetting(key, parsedValue, adminId);
+                results.push({ key, success: true });
+            } catch (error) {
+                console.error(`Failed to reset setting ${key}:`, error);
+                results.push({ key, success: false, error: error.message });
+            }
+        }
+        
+        return results;
+    }
+
+    // Get default settings structure (matching utils/settings.js defaults)
+    getDefaultSettings() {
+        return {
+            // Branding
+            'site_title': { value: 'Curtin Capstone Connect', type: 'string', category: 'branding', description: 'Main title displayed across the application' },
+            'site_tagline': { value: 'Connecting Students with Real-World Projects', type: 'string', category: 'branding', description: 'Tagline shown on homepage' },
+            'primary_color': { value: '#e31837', type: 'string', category: 'branding', description: 'Primary color for buttons and headers (hex format)' },
+            'secondary_color': { value: '#1a1a1a', type: 'string', category: 'branding', description: 'Secondary accent color (hex format)' },
+            'footer_text': { value: '© 2025 Curtin University. All rights reserved.', type: 'string', category: 'branding', description: 'Footer copyright text' },
+            
+            // Auth
+            'student_domain_whitelist': { value: JSON.stringify(['@student.curtin.edu.au', '@postgrad.curtin.edu.au']), type: 'json', category: 'auth', description: 'Allowed email domains for student registration' },
+            'client_registration_mode': { value: 'open', type: 'string', category: 'auth', description: 'Client registration mode: open, whitelist, or approval_required' },
+            'client_domain_whitelist': { value: '[]', type: 'json', category: 'auth', description: 'Allowed email domains for client registration (if mode is whitelist)' },
+            'require_email_verification': { value: 'false', type: 'boolean', category: 'auth', description: 'Whether email verification is required for registration' },
+            
+            // Features
+            'enable_gallery': { value: 'true', type: 'boolean', category: 'features', description: 'Enable/disable project gallery feature' },
+            'enable_analytics': { value: 'true', type: 'boolean', category: 'features', description: 'Enable/disable analytics dashboard for admins' },
+            'enable_student_favorites': { value: 'true', type: 'boolean', category: 'features', description: 'Allow students to favorite projects' },
+            'enable_bulk_operations': { value: 'true', type: 'boolean', category: 'features', description: 'Enable bulk operations for admin users' },
+            'enable_project_phases': { value: 'true', type: 'boolean', category: 'features', description: 'Allow multi-phase projects' },
+            'enable_interest_messages': { value: 'true', type: 'boolean', category: 'features', description: 'Allow students to add messages when expressing interest' },
+            
+            // Rules
+            'max_student_interests': { value: '5', type: 'number', category: 'rules', description: 'Maximum number of active project interests per student' },
+            'max_student_favorites': { value: '20', type: 'number', category: 'rules', description: 'Maximum number of favorite projects per student' },
+            'min_team_size': { value: '1', type: 'number', category: 'rules', description: 'Minimum team size for projects' },
+            'max_team_size': { value: '10', type: 'number', category: 'rules', description: 'Maximum team size for projects' },
+            'interest_withdrawal_allowed': { value: 'true', type: 'boolean', category: 'rules', description: 'Allow students to withdraw interest from projects' },
+            'project_types': { value: JSON.stringify(['development', 'research', 'design', 'analysis', 'other']), type: 'json', category: 'rules', description: 'Available project type options' },
+            'academic_terms': { value: JSON.stringify(['Semester 1', 'Semester 2', 'Summer', 'Winter']), type: 'json', category: 'rules', description: 'Academic term options' },
+            
+            // Privacy
+            'data_retention_years': { value: '7', type: 'number', category: 'privacy', description: 'Years to retain data before archiving' },
+            'show_student_details_to_clients': { value: 'true', type: 'boolean', category: 'privacy', description: 'Whether clients can see full student details' },
+            'public_project_visibility': { value: 'true', type: 'boolean', category: 'privacy', description: 'Whether non-logged users can browse projects' },
+            'public_gallery_visibility': { value: 'true', type: 'boolean', category: 'privacy', description: 'Whether non-logged users can view gallery' }
         };
     }
 }
