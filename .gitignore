@@ -18,6 +18,8 @@ database/*.db-wal
 database/*.db-shm
 *.sqlite
 *.sqlite3
+# Database files in root (backup/temporary)
+*.db
 
 # Logs
 logs/
@@ -120,6 +122,12 @@ uploads/
 public/uploads/
 server.log
 error.log
+
+# Development and migration scripts (temporary)
+add-*.js
+*-migration.js
+database/setup.js
+database/run-*.js
 
 # Security
 *.pem
