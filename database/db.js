@@ -168,6 +168,35 @@ class Database {
         return this.get(sql, [email]);
     }
 
+    // Unified authentication - try all user types
+    async getUserByEmail(email) {
+        try {
+            // Try student first (most common)
+            const student = await this.getStudentByEmail(email);
+            if (student) {
+                return { user: student, type: 'student' };
+            }
+
+            // Try client
+            const client = await this.getClientByEmail(email);
+            if (client) {
+                return { user: client, type: 'client' };
+            }
+
+            // Try admin
+            const admin = await this.getAdminByEmail(email);
+            if (admin) {
+                return { user: admin, type: 'admin' };
+            }
+
+            // No user found
+            return null;
+        } catch (error) {
+            console.error('Error in unified user lookup:', error);
+            throw error;
+        }
+    }
+
     async updateAdminLogin(adminId) {
         const sql = `UPDATE admin_users SET last_login = CURRENT_TIMESTAMP WHERE id = ?`;
         return this.run(sql, [adminId]);

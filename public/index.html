@@ -66,19 +66,19 @@
                                 <div class="feature-icon">🏢</div>
                                 <h3>For Industry Partners</h3>
                                 <p>Submit project proposals and connect with talented final-year students ready to tackle real-world challenges.</p>
-                                <button class="btn btn-outline" onclick="showClientRegistration()">Get Started</button>
+                                <button class="btn btn-outline" onclick="showClientRegistration()">New Clients Start Here</button>
                             </div>
                             <div class="feature-card">
                                 <div class="feature-icon">🎓</div>
                                 <h3>For Students</h3>
                                 <p>Discover exciting capstone opportunities that align with your skills and career aspirations.</p>
-                                <button class="btn btn-outline" onclick="showStudentRegistration()">Join Now</button>
+                                <button class="btn btn-outline" onclick="showStudentRegistration()">Students Register Here</button>
                             </div>
                             <div class="feature-card">
                                 <div class="feature-icon">⚙️</div>
                                 <h3>For UC Staff</h3>
                                 <p>Streamline project management with powerful tools for approval, tracking, and analytics.</p>
-                                <button class="btn btn-outline" onclick="showAdminLogin()">Admin Portal</button>
+                                <button class="btn btn-outline" onclick="showSection('login')">Staff Login</button>
                             </div>
                         </div>
                     </div>
@@ -517,47 +517,38 @@
             <!-- Login Section -->
             <section id="login" class="section section-login">
                 <div class="container">
-                    <div class="auth-container">
-                        <div class="auth-tabs">
-                            <button class="auth-tab active" data-tab="student">Student</button>
-                            <button class="auth-tab" data-tab="client">Industry Client</button>
-                            <button class="auth-tab" data-tab="admin">UC Staff</button>
-                        </div>
+                    <div class="login-container">
+                        <h2 class="section-title">Login to Your Account</h2>
+                        <p class="login-subtitle">Enter your email and password to access your account</p>
                         
-                        <div class="auth-content">
-                            <div id="studentAuth" class="auth-panel active">
-                                <h3>Student Login</h3>
-                                <form id="studentLoginForm" class="auth-form">
-                                    <input type="email" name="email" placeholder="Student Email" required>
-                                    <input type="password" name="password" placeholder="Password" required>
-                                    <button type="submit" class="btn btn-primary">Login</button>
-                                </form>
-                                <p class="auth-link">
-                                    Don't have an account? 
-                                    <a href="#" onclick="showStudentRegistration()">Register here</a>
-                                </p>
-                            </div>
-
-                            <div id="clientAuth" class="auth-panel">
-                                <h3>Industry Client Login</h3>
-                                <form id="clientLoginForm" class="auth-form">
-                                    <input type="email" name="email" placeholder="Business Email" required>
-                                    <input type="password" name="password" placeholder="Password" required>
-                                    <button type="submit" class="btn btn-primary">Login</button>
-                                </form>
-                                <p class="auth-link">
-                                    New partner? 
-                                    <a href="#" onclick="showClientRegistration()">Submit your first project</a>
-                                </p>
-                            </div>
-
-                            <div id="adminAuth" class="auth-panel">
-                                <h3>UC Staff Login</h3>
-                                <form id="adminLoginForm" class="auth-form">
-                                    <input type="email" name="email" placeholder="UC Email" required>
-                                    <input type="password" name="password" placeholder="Password" required>
-                                    <button type="submit" class="btn btn-primary">Login</button>
-                                </form>
+                        <!-- Unified Login Form -->
+                        <div class="login-form-container">
+                            <form id="unifiedLoginForm" class="login-form">
+                                <div class="form-group">
+                                    <label for="loginEmail">Email Address</label>
+                                    <input type="email" id="loginEmail" name="email" placeholder="Enter your email address" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="loginPassword">Password</label>
+                                    <input type="password" id="loginPassword" name="password" placeholder="Enter your password" required>
+                                </div>
+                                <button type="submit" class="btn btn-primary btn-large">
+                                    Login
+                                </button>
+                            </form>
+                            
+                            <!-- Registration Links -->
+                            <div class="auth-links">
+                                <p class="auth-link-text">Don't have an account?</p>
+                                <div class="registration-options">
+                                    <a href="#" onclick="showStudentRegistration()" class="registration-link">
+                                        Student Registration
+                                    </a>
+                                    <span class="separator">•</span>
+                                    <a href="#" onclick="showClientRegistration()" class="registration-link">
+                                        Business Registration
+                                    </a>
+                                </div>
                             </div>
                         </div>
                     </div>

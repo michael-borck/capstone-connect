@@ -139,6 +139,10 @@ app.get('/api/health', (req, res) => {
     });
 });
 
+// Public settings route (no auth required)
+const settingsRoutes = require('./routes/settings');
+app.use('/api/settings', settingsRoutes);
+
 // API route mounting with enhanced security (rate limiting disabled for development)
 app.use('/api/auth', /* authLimiter, */ bruteForceProtection.middleware(), authRoutes);
 app.use('/api/projects', projectRoutes);

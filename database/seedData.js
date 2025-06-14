@@ -470,9 +470,7 @@ async function seedInterests() {
                         await database.expressInterest(student.id, project.id, message);
                         console.log(`  ${student.full_name} expressed interest in "${project.title}"`);
                     } catch (error) {
-                        if (!error.message.includes('UNIQUE constraint failed')) {
-                            console.error(`Error adding interest for ${student.full_name}:`, error.message);
-                        }
+                        // Silently ignore duplicate interests
                     }
                 }
             }
@@ -492,9 +490,7 @@ async function seedInterests() {
                             [student.id, project.id]
                         );
                     } catch (error) {
-                        if (!error.message.includes('UNIQUE constraint failed')) {
-                            console.error(`Error adding favorite:`, error.message);
-                        }
+                        // Silently ignore duplicate favorites
                     }
                 }
             }
@@ -520,7 +516,7 @@ async function seedInterests() {
                         );
                         console.log(`  Additional interest: ${student.full_name} → "${project.title}"`);
                     } catch (error) {
-                        // Ignore duplicates
+                        // Silently ignore duplicate interests
                     }
                 }
             }

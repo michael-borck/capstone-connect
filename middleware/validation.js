@@ -247,8 +247,18 @@ const validationRules = {
 
     // Express interest
     expressInterest: [
-        commonRules.projectId,
+        body('projectId')
+            .isInt({ min: 1 })
+            .withMessage('Project ID must be a positive integer'),
         commonRules.message,
+        handleValidationErrors
+    ],
+
+    // Add to favorites
+    addToFavorites: [
+        body('projectId')
+            .isInt({ min: 1 })
+            .withMessage('Project ID must be a positive integer'),
         handleValidationErrors
     ],
 
@@ -321,6 +331,13 @@ const validationRules = {
     // Generic ID validation
     validateId: [
         commonRules.projectId,
+        handleValidationErrors
+    ],
+    
+    validateProjectIdParam: [
+        param('projectId')
+            .isInt({ min: 1 })
+            .withMessage('Project ID must be a positive integer'),
         handleValidationErrors
     ]
 };

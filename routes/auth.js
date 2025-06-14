@@ -1,5 +1,6 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 const router = express.Router();
 
 const database = require('../database/db');
@@ -589,6 +590,175 @@ router.get('/verify', authenticate, (req, res) => {
             type: req.user.type
         }
     });
+});
+
+// Unified login endpoint - determines user type automatically
+router.post('/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+
+        // Validate input
+        if (!email || !password) {
+            return res.status(400).json({
+                success: false,
+                error: 'Email and password are required'
+            });
+        }
+
+        // Normalize email
+        const normalizedEmail = email.toLowerCase().trim();
+
+        // Find user across all user types
+        const userResult = await database.getUserByEmail(normalizedEmail);
+        
+        if (!userResult) {
+            // Log failed attempt
+            await database.logAudit(
+                'unknown',
+                0,
+                'login_failed',
+                'auth',
+                null,
+                null,
+                JSON.stringify({ 
+                    email: normalizedEmail, 
+                    reason: 'user_not_found',
+                    timestamp: new Date().toISOString()
+                }),
+                req.ip
+            );
+
+            return res.status(401).json({
+                success: false,
+                error: 'Invalid email or password'
+            });
+        }
+
+        const { user, type } = userResult;
+
+        // Verify password
+        const isValidPassword = await bcrypt.compare(password, user.password_hash);
+        if (!isValidPassword) {
+            // Log failed attempt
+            await database.logAudit(
+                type,
+                user.id,
+                'login_failed',
+                'auth',
+                null,
+                null,
+                JSON.stringify({ 
+                    email: normalizedEmail, 
+                    reason: 'invalid_password',
+                    timestamp: new Date().toISOString()
+                }),
+                req.ip
+            );
+
+            return res.status(401).json({
+                success: false,
+                error: 'Invalid email or password'
+            });
+        }
+
+        // Update last login timestamp
+        switch (type) {
+            case 'student':
+                await database.updateStudentLogin(user.id);
+                break;
+            case 'client':
+                await database.updateClientLogin(user.id);
+                break;
+            case 'admin':
+                await database.updateAdminLogin(user.id);
+                break;
+        }
+
+        // Generate JWT token
+        const tokenPayload = {
+            id: user.id,
+            email: user.email,
+            type: type
+        };
+
+        // Add type-specific fields to token
+        switch (type) {
+            case 'student':
+                tokenPayload.fullName = user.full_name;
+                tokenPayload.studentId = user.student_id;
+                break;
+            case 'client':
+                tokenPayload.organizationName = user.organization_name;
+                tokenPayload.contactName = user.contact_name;
+                break;
+            case 'admin':
+                tokenPayload.fullName = user.full_name;
+                break;
+        }
+
+        const token = jwt.sign(tokenPayload, config.jwt.secret, { expiresIn: '24h' });
+
+        // Log successful login
+        await database.logAudit(
+            type,
+            user.id,
+            'login_successful',
+            'auth',
+            null,
+            null,
+            JSON.stringify({ 
+                email: normalizedEmail,
+                userType: type,
+                timestamp: new Date().toISOString()
+            }),
+            req.ip
+        );
+
+        res.json({
+            success: true,
+            message: `${type.charAt(0).toUpperCase() + type.slice(1)} login successful`,
+            token,
+            user: {
+                id: user.id,
+                email: user.email,
+                type: type,
+                ...(type === 'student' && { 
+                    fullName: user.full_name, 
+                    studentId: user.student_id 
+                }),
+                ...(type === 'client' && { 
+                    organizationName: user.organization_name, 
+                    contactName: user.contact_name 
+                }),
+                ...(type === 'admin' && { 
+                    fullName: user.full_name 
+                })
+            }
+        });
+
+    } catch (error) {
+        console.error('Unified login error:', error);
+        
+        // Log system error
+        await database.logAudit(
+            'system',
+            0,
+            'login_error',
+            'auth',
+            null,
+            null,
+            JSON.stringify({ 
+                error: error.message,
+                timestamp: new Date().toISOString()
+            }),
+            req.ip
+        ).catch(console.error);
+
+        res.status(500).json({
+            success: false,
+            error: 'Internal server error'
+        });
+    }
 });
 
 module.exports = router;

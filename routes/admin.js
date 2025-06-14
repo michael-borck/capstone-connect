@@ -8,6 +8,7 @@ const { logger } = require('../utils/logger');
 
 // Import sub-routers
 const usersRouter = require('./admin/users');
+const settingsRouter = require('./admin/settings');
 
 // Get system health and statistics
 router.get('/health', authenticate, authorize('admin'), async (req, res) => {
@@ -512,7 +513,9 @@ router.get('/statistics', authenticate, authorize('admin'), async (req, res) => 
 // Get all projects for admin management
 router.get('/projects/all', authenticate, authorize('admin'), async (req, res) => {
     try {
-        const projects = await database.query(`
+        const { status } = req.query;
+        
+        let sql = `
             SELECT 
                 p.*,
                 c.organization_name,
@@ -524,9 +527,17 @@ router.get('/projects/all', authenticate, authorize('admin'), async (req, res) =
             JOIN clients c ON p.client_id = c.id
             LEFT JOIN student_interests si ON p.id = si.project_id AND si.is_active = 1
             LEFT JOIN student_favorites sf ON p.id = sf.project_id
-            GROUP BY p.id
-            ORDER BY p.created_at DESC
-        `);
+        `;
+        
+        let params = [];
+        if (status) {
+            sql += ` WHERE p.status = ?`;
+            params.push(status);
+        }
+        
+        sql += ` GROUP BY p.id ORDER BY p.created_at DESC`;
+        
+        const projects = await database.query(sql, params);
 
         await logger.logUserAction('viewed_all_projects', req.user, {
             requestId: req.id,
@@ -766,7 +777,75 @@ router.post('/projects/bulk-reject', authenticate, authorize('admin'), async (re
     }
 });
 
+// Create project as admin
+router.post('/projects/create', authenticate, authorize('admin'), async (req, res) => {
+    try {
+        const { clientId, title, description, type, teamSize, requiredSkills, status } = req.body;
+        
+        // Validate required fields
+        if (!clientId || !title || !description || !type || !teamSize) {
+            return res.status(400).json({
+                success: false,
+                message: 'Client ID, title, description, type, and team size are required'
+            });
+        }
+        
+        // Verify client exists
+        const client = await database.getClientById(clientId);
+        if (!client) {
+            return res.status(404).json({
+                success: false,
+                message: 'Client not found'
+            });
+        }
+        
+        // Create project
+        const projectData = {
+            clientId,
+            title,
+            description,
+            type,
+            teamSize,
+            requiredSkills: requiredSkills || '',
+            status: status || 'pending',
+            createdBy: req.user.id // Track which admin created it
+        };
+        
+        const project = await database.createProject(projectData);
+        
+        // Log audit trail
+        await database.logAudit(
+            req.user.type,
+            req.user.id,
+            'project_created_by_admin',
+            'project',
+            project.id,
+            null,
+            JSON.stringify({ clientId, title, status }),
+            req.ip
+        );
+        
+        res.status(201).json({
+            success: true,
+            message: 'Project created successfully',
+            project: {
+                id: project.id,
+                title: project.title,
+                status: project.status
+            }
+        });
+        
+    } catch (error) {
+        console.error('Error creating project:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to create project'
+        });
+    }
+});
+
 // Mount sub-routers
 router.use('/users', usersRouter);
+router.use('/settings', settingsRouter);
 
 module.exports = router;

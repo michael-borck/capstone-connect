@@ -344,4 +344,135 @@ router.delete('/:userType/:userId', authenticate, authorize('admin'), async (req
     }
 });
 
+// Create new user endpoint
+router.post('/create', authenticate, authorize('admin'), async (req, res) => {
+    const bcrypt = require('bcrypt');
+    
+    try {
+        const { type, email, password, fullName, studentId, course, yearLevel, organizationName, contactName, website } = req.body;
+        
+        // Validate required fields
+        if (!type || !email || !password) {
+            return res.status(400).json({
+                success: false,
+                message: 'User type, email, and password are required'
+            });
+        }
+        
+        // Validate password length
+        if (password.length < 8) {
+            return res.status(400).json({
+                success: false,
+                message: 'Password must be at least 8 characters long'
+            });
+        }
+        
+        // Check if email already exists across all user types
+        const existingStudent = await database.getStudentByEmail(email);
+        const existingClient = await database.getClientByEmail(email);
+        const existingAdmin = await database.getAdminByEmail(email);
+        
+        if (existingStudent || existingClient || existingAdmin) {
+            return res.status(400).json({
+                success: false,
+                message: 'A user with this email already exists'
+            });
+        }
+        
+        // Hash the password
+        const passwordHash = await bcrypt.hash(password, 10);
+        
+        // Create user based on type
+        let newUser;
+        if (type === 'student') {
+            if (!fullName || !studentId || !course || !yearLevel) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'All student fields are required'
+                });
+            }
+            
+            // Store additional student fields in the database
+            newUser = await database.createStudent(email, passwordHash, fullName, studentId);
+            
+            // Update student with additional fields
+            await database.run(
+                'UPDATE students SET course = ?, year_level = ? WHERE id = ?',
+                [course, parseInt(yearLevel), newUser.lastID]
+            );
+            
+            newUser.id = newUser.lastID;
+            
+        } else if (type === 'client') {
+            if (!organizationName || !contactName) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Organization name and contact name are required'
+                });
+            }
+            
+            newUser = await database.createClient(
+                email, 
+                passwordHash, 
+                organizationName, 
+                contactName,
+                '', // phone
+                '', // address
+                '', // contact title
+                website || '', // website
+                '', // description
+                '' // industry
+            );
+            
+            newUser.id = newUser.lastID;
+            
+        } else if (type === 'admin') {
+            if (!fullName) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Admin name is required'
+                });
+            }
+            
+            newUser = await database.createAdmin(email, passwordHash, fullName);
+            newUser.id = newUser.lastID;
+            
+        } else {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid user type'
+            });
+        }
+        
+        // Log audit trail
+        await database.logAudit(
+            req.user.type,
+            req.user.id,
+            'user_created',
+            type,
+            newUser.id,
+            null,
+            JSON.stringify({ email, type }),
+            req.ip
+        );
+        
+        res.status(201).json({
+            success: true,
+            message: `${type.charAt(0).toUpperCase() + type.slice(1)} user created successfully`,
+            user: {
+                id: newUser.id,
+                email: email,
+                type
+            }
+        });
+        
+    } catch (error) {
+        console.error('Error creating user:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to create user'
+        });
+    }
+});
+
 module.exports = router;

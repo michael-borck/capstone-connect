@@ -14,6 +14,16 @@ class AuthManager {
     }
 
     setupFormHandlers() {
+        // Unified login form (new)
+        const unifiedForm = document.getElementById('unifiedLoginForm');
+        if (unifiedForm) {
+            unifiedForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.handleUnifiedLogin(e);
+            });
+        }
+
+        // Legacy forms (keeping for backward compatibility)
         // Student login form
         const studentForm = document.getElementById('studentLoginForm');
         if (studentForm) {
@@ -39,6 +49,75 @@ class AuthManager {
                 e.preventDefault();
                 this.handleAdminLogin(e.target);
             });
+        }
+    }
+
+    // Unified login handler
+    async handleUnifiedLogin(e) {
+        try {
+            const formData = new FormData(e.target);
+            const email = formData.get('email');
+            const password = formData.get('password');
+
+            // Validate input
+            if (!email || !password) {
+                throw new Error('Please enter both email and password');
+            }
+
+            // Show loading state
+            const submitButton = e.target.querySelector('button[type="submit"]');
+            const originalText = submitButton.textContent;
+            submitButton.textContent = 'Logging in...';
+            submitButton.disabled = true;
+
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    // Store token and user data
+                    this.setToken(data.token);
+                    this.user = data.user;
+                    
+                    // Store user in localStorage for persistence
+                    localStorage.setItem('user', JSON.stringify(data.user));
+                    
+                    console.log(`${data.user.type} login successful:`, data.user);
+                    
+                    // Clear form
+                    e.target.reset();
+                    
+                    // Navigate to appropriate dashboard
+                    if (window.app && typeof window.app.checkAuthStatus === 'function') {
+                        await window.app.checkAuthStatus();
+                    }
+                    
+                    // Success message will be shown by the app
+                } else {
+                    throw new Error(data.error || 'Login failed');
+                }
+            } finally {
+                // Reset button state
+                submitButton.textContent = originalText;
+                submitButton.disabled = false;
+            }
+
+        } catch (error) {
+            console.error('Unified login error:', error);
+            
+            // Show user-friendly error message
+            if (window.app && typeof window.app.showErrorToast === 'function') {
+                window.app.showErrorToast('Login Failed', error.message);
+            } else {
+                alert(`Login failed: ${error.message}`);
+            }
         }
     }
 

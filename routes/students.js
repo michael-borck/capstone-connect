@@ -92,8 +92,77 @@ router.post('/interests', authenticate, authorize('student'), validationRules.ex
     }
 });
 
+// Bulk withdraw interests (for cleanup or limit management)
+router.delete('/interests/bulk', authenticate, authorize('student'), async (req, res) => {
+    try {
+        const { projectIds } = req.body;
+        const studentId = req.user.id;
+
+        if (!Array.isArray(projectIds) || projectIds.length === 0) {
+            return res.status(400).json({
+                error: 'Project IDs array is required',
+                code: 'INVALID_PROJECT_IDS'
+            });
+        }
+
+        const results = [];
+        let successCount = 0;
+        let errorCount = 0;
+
+        for (const projectId of projectIds) {
+            try {
+                // Check if student has expressed interest
+                const interests = await database.getStudentInterests(studentId);
+                const hasInterest = interests.some(interest => 
+                    interest.project_id === projectId && interest.is_active
+                );
+
+                if (hasInterest) {
+                    await database.withdrawInterest(studentId, projectId);
+                    successCount++;
+                    results.push({ projectId, status: 'withdrawn' });
+                } else {
+                    results.push({ projectId, status: 'not_found' });
+                }
+            } catch (error) {
+                errorCount++;
+                results.push({ projectId, status: 'error', error: error.message });
+            }
+        }
+
+        // Log audit trail
+        await database.logAudit(
+            'student',
+            studentId,
+            'bulk_interest_withdrawal',
+            'interests',
+            null,
+            null,
+            JSON.stringify({ projectIds, successCount, errorCount }),
+            req.ip
+        );
+
+        res.json({
+            message: `Bulk withdrawal completed: ${successCount} successful, ${errorCount} errors`,
+            results,
+            summary: {
+                total: projectIds.length,
+                successful: successCount,
+                errors: errorCount
+            }
+        });
+
+    } catch (error) {
+        console.error('Error in bulk withdrawal:', error);
+        res.status(500).json({
+            error: 'Internal server error',
+            code: 'BULK_WITHDRAWAL_ERROR'
+        });
+    }
+});
+
 // Withdraw interest from a project
-router.delete('/interests/:projectId', authenticate, authorize('student'), validationRules.validateId, async (req, res) => {
+router.delete('/interests/:projectId', authenticate, authorize('student'), validationRules.validateProjectIdParam, async (req, res) => {
     try {
         const projectId = parseInt(req.params.projectId);
         const studentId = req.user.id;
@@ -198,7 +267,7 @@ router.get('/interests', authenticate, authorize('student'), async (req, res) =>
 });
 
 // Add project to favorites
-router.post('/favorites', authenticate, authorize('student'), validationRules.expressInterest, async (req, res) => {
+router.post('/favorites', authenticate, authorize('student'), validationRules.addToFavorites, async (req, res) => {
     try {
         const { projectId } = req.body;
         const studentId = req.user.id;
@@ -266,7 +335,7 @@ router.post('/favorites', authenticate, authorize('student'), validationRules.ex
 });
 
 // Remove project from favorites
-router.delete('/favorites/:projectId', authenticate, authorize('student'), validationRules.validateId, async (req, res) => {
+router.delete('/favorites/:projectId', authenticate, authorize('student'), validationRules.validateProjectIdParam, async (req, res) => {
     try {
         const projectId = parseInt(req.params.projectId);
         const studentId = req.user.id;
@@ -502,75 +571,6 @@ router.get('/interests/project/:projectId', authenticate, async (req, res) => {
         res.status(500).json({
             error: 'Internal server error',
             code: 'PROJECT_INTERESTS_ERROR'
-        });
-    }
-});
-
-// Bulk withdraw interests (for cleanup or limit management)
-router.delete('/interests/bulk', authenticate, authorize('student'), async (req, res) => {
-    try {
-        const { projectIds } = req.body;
-        const studentId = req.user.id;
-
-        if (!Array.isArray(projectIds) || projectIds.length === 0) {
-            return res.status(400).json({
-                error: 'Project IDs array is required',
-                code: 'INVALID_PROJECT_IDS'
-            });
-        }
-
-        const results = [];
-        let successCount = 0;
-        let errorCount = 0;
-
-        for (const projectId of projectIds) {
-            try {
-                // Check if student has expressed interest
-                const interests = await database.getStudentInterests(studentId);
-                const hasInterest = interests.some(interest => 
-                    interest.project_id === projectId && interest.is_active
-                );
-
-                if (hasInterest) {
-                    await database.withdrawInterest(studentId, projectId);
-                    successCount++;
-                    results.push({ projectId, status: 'withdrawn' });
-                } else {
-                    results.push({ projectId, status: 'not_found' });
-                }
-            } catch (error) {
-                errorCount++;
-                results.push({ projectId, status: 'error', error: error.message });
-            }
-        }
-
-        // Log audit trail
-        await database.logAudit(
-            'student',
-            studentId,
-            'bulk_interest_withdrawal',
-            'interests',
-            null,
-            null,
-            JSON.stringify({ projectIds, successCount, errorCount }),
-            req.ip
-        );
-
-        res.json({
-            message: `Bulk withdrawal completed: ${successCount} successful, ${errorCount} errors`,
-            results,
-            summary: {
-                total: projectIds.length,
-                successful: successCount,
-                errors: errorCount
-            }
-        });
-
-    } catch (error) {
-        console.error('Error in bulk withdrawal:', error);
-        res.status(500).json({
-            error: 'Internal server error',
-            code: 'BULK_WITHDRAWAL_ERROR'
         });
     }
 });
