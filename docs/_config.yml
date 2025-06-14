@@ -1,0 +1,83 @@
+# Jekyll configuration for Curtin Capstone Connect Documentation
+title: "Curtin Capstone Connect"
+description: "Documentation for the Curtin Capstone Project Management System - connecting industry clients with final-year students"
+baseurl: "/capstone-connect"
+url: "https://michael-borck.github.io"
+
+# GitHub repository info
+repository: michael-borck/capstone-connect
+
+# Theme
+theme: minima
+
+# Jekyll settings
+markdown: kramdown
+highlighter: rouge
+plugins:
+  - jekyll-feed
+  - jekyll-sitemap
+  - jekyll-seo-tag
+
+# Navigation
+header_pages:
+  - README.md
+  - architecture.md
+  - tech-stack.md
+  - workflows/client-guide.md
+  - workflows/student-guide.md
+  - workflows/admin-guide.md
+  - api/README.md
+  - CONTRIBUTING.md
+
+# Collections
+collections:
+  workflows:
+    output: true
+    permalink: /:collection/:name/
+  api:
+    output: true
+    permalink: /:collection/:name/
+  support:
+    output: true
+    permalink: /:collection/:name/
+
+# Defaults
+defaults:
+  - scope:
+      path: ""
+      type: "pages"
+    values:
+      layout: "default"
+  - scope:
+      path: "_workflows"
+      type: "workflows"
+    values:
+      layout: "default"
+  - scope:
+      path: "_api"
+      type: "api"
+    values:
+      layout: "default"
+  - scope:
+      path: "_support"
+      type: "support"
+    values:
+      layout: "default"
+
+# Exclude from processing
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - node_modules
+  - vendor/bundle/
+  - vendor/cache/
+  - vendor/gems/
+  - vendor/ruby/
+
+# SEO
+author:
+  name: "Curtin University"
+  email: "support@curtin.edu.au"
+
+# Social
+github_username: michael-borck
