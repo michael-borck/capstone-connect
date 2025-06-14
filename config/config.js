@@ -17,6 +17,8 @@ const config = {
         'http://127.0.0.1:1077',
         'http://127.0.0.1:3000',
         'http://127.0.0.1:3001',
+        // Add your proxy domains here
+        process.env.PROXY_DOMAIN || 'https://your-domain.com',
         ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : [])
     ],
 

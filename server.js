@@ -44,6 +44,9 @@ const galleryRoutes = require('./routes/gallery');
 
 const app = express();
 
+// Trust proxy for deployment behind reverse proxy
+app.set('trust proxy', 1);
+
 // Initialize security middleware instances
 const bruteForceProtection = new BruteForceProtection();
 

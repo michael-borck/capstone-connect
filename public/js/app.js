@@ -27,13 +27,7 @@ class CapstoneApp {
             });
         });
 
-        // Auth tabs
-        document.querySelectorAll('.auth-tab').forEach(tab => {
-            tab.addEventListener('click', (e) => {
-                const tabType = e.target.getAttribute('data-tab');
-                this.showAuthTab(tabType);
-            });
-        });
+        // Legacy auth tabs removed - using unified login form
 
         // Mobile menu toggle
         const mobileToggle = document.getElementById('mobileMenuToggle');
@@ -330,23 +324,9 @@ class CapstoneApp {
     }
 
     showAuthTab(tabType) {
-        // Update tab buttons
-        document.querySelectorAll('.auth-tab').forEach(tab => {
-            tab.classList.remove('active');
-            if (tab.getAttribute('data-tab') === tabType) {
-                tab.classList.add('active');
-            }
-        });
-
-        // Update panels
-        document.querySelectorAll('.auth-panel').forEach(panel => {
-            panel.classList.remove('active');
-        });
-
-        const targetPanel = document.getElementById(`${tabType}Auth`);
-        if (targetPanel) {
-            targetPanel.classList.add('active');
-        }
+        // Legacy function - no longer needed with unified login
+        // Just show the login section (unified form handles all user types)
+        console.log(`Showing unified login (legacy showAuthTab called with: ${tabType})`);
     }
 
     async showProjectDetails(projectId) {
@@ -412,7 +392,7 @@ class CapstoneApp {
             } else {
                 actionButtons = `
                     <div style="text-align: center;">
-                        <button class="btn btn-primary" onclick="app.showSection('login'); app.showAuthTab('student');">
+                        <button class="btn btn-primary" onclick="app.showSection('login');">
                             Login to Express Interest
                         </button>
                     </div>
@@ -593,7 +573,6 @@ class CapstoneApp {
         if (!this.currentUser) {
             console.log('Please log in as a student to express interest in projects.');
             this.showSection('login');
-            this.showAuthTab('student');
             return;
         }
 
@@ -767,7 +746,6 @@ class CapstoneApp {
         if (!this.currentUser) {
             console.log('Please log in to add projects to favorites.');
             this.showSection('login');
-            this.showAuthTab('student');
             return;
         }
 
@@ -893,7 +871,6 @@ class CapstoneApp {
         if (!this.currentUser) {
             console.log('Please log in to add projects to favorites.');
             this.showSection('login');
-            this.showAuthTab('student');
             return;
         }
 
@@ -5113,7 +5090,6 @@ function showAdminLogin() {
         app.showAdminDashboard();
     } else {
         app.showSection('login');
-        app.showAuthTab('admin');
     }
 }
 
@@ -5174,7 +5150,7 @@ window.closeModal = () => app.closeModal();
 window.showProjectDetail = (projectId) => app.showProjectDetail(projectId);
 window.toggleFavorite = (projectId, event) => app.toggleFavorite(projectId, event);
 window.expressInterest = (projectId, event) => app.expressInterest(projectId, event);
-window.showAuthTab = (tab) => app.showAuthTab(tab);
+// Legacy function removed - unified login no longer uses tabs
 window.approveProject = (projectId) => app.approveProject(projectId);
 window.rejectProject = (projectId) => app.rejectProject(projectId);
 window.completeProject = (projectId) => app.completeProject(projectId);
