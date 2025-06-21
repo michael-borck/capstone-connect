@@ -123,11 +123,11 @@ public/uploads/
 server.log
 error.log
 
-# Development and migration scripts (temporary)
+# Development and migration scripts (temporary) 
 add-*.js
 *-migration.js
-database/setup.js
-database/run-*.js
+# Allow essential database scripts
+!database/run-config-migration.js
 
 # Security
 *.pem
