@@ -592,8 +592,21 @@ router.get('/verify', authenticate, (req, res) => {
     });
 });
 
+// Helper function to get client IP safely (proxy-aware)
+function getClientIP(req) {
+    return req.ip || 
+           req.connection?.remoteAddress || 
+           req.socket?.remoteAddress || 
+           (req.connection?.socket ? req.connection.socket.remoteAddress : null) ||
+           req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+           req.headers['x-real-ip'] ||
+           'unknown';
+}
+
 // Unified login endpoint - determines user type automatically
 router.post('/login', async (req, res) => {
+    const clientIP = getClientIP(req);
+    
     try {
         const { email, password } = req.body;
 
@@ -612,21 +625,25 @@ router.post('/login', async (req, res) => {
         const userResult = await database.getUserByEmail(normalizedEmail);
         
         if (!userResult) {
-            // Log failed attempt
-            await database.logAudit(
-                'unknown',
-                0,
-                'login_failed',
-                'auth',
-                null,
-                null,
-                JSON.stringify({ 
-                    email: normalizedEmail, 
-                    reason: 'user_not_found',
-                    timestamp: new Date().toISOString()
-                }),
-                req.ip
-            );
+            // Log failed attempt with safe error handling
+            try {
+                await database.logAudit(
+                    'unknown',
+                    0,
+                    'login_failed',
+                    'auth',
+                    null,
+                    null,
+                    JSON.stringify({ 
+                        email: normalizedEmail, 
+                        reason: 'user_not_found',
+                        timestamp: new Date().toISOString()
+                    }),
+                    clientIP
+                );
+            } catch (auditError) {
+                console.warn('Audit logging failed:', auditError.message);
+            }
 
             return res.status(401).json({
                 success: false,
@@ -639,21 +656,25 @@ router.post('/login', async (req, res) => {
         // Verify password
         const isValidPassword = await bcrypt.compare(password, user.password_hash);
         if (!isValidPassword) {
-            // Log failed attempt
-            await database.logAudit(
-                type,
-                user.id,
-                'login_failed',
-                'auth',
-                null,
-                null,
-                JSON.stringify({ 
-                    email: normalizedEmail, 
-                    reason: 'invalid_password',
-                    timestamp: new Date().toISOString()
-                }),
-                req.ip
-            );
+            // Log failed attempt with safe error handling
+            try {
+                await database.logAudit(
+                    type,
+                    user.id,
+                    'login_failed',
+                    'auth',
+                    null,
+                    null,
+                    JSON.stringify({ 
+                        email: normalizedEmail, 
+                        reason: 'invalid_password',
+                        timestamp: new Date().toISOString()
+                    }),
+                    clientIP
+                );
+            } catch (auditError) {
+                console.warn('Audit logging failed:', auditError.message);
+            }
 
             return res.status(401).json({
                 success: false,
@@ -662,16 +683,21 @@ router.post('/login', async (req, res) => {
         }
 
         // Update last login timestamp
-        switch (type) {
-            case 'student':
-                await database.updateStudentLogin(user.id);
-                break;
-            case 'client':
-                await database.updateClientLogin(user.id);
-                break;
-            case 'admin':
-                await database.updateAdminLogin(user.id);
-                break;
+        try {
+            switch (type) {
+                case 'student':
+                    await database.updateStudentLogin(user.id);
+                    break;
+                case 'client':
+                    await database.updateClientLogin(user.id);
+                    break;
+                case 'admin':
+                    await database.updateAdminLogin(user.id);
+                    break;
+            }
+        } catch (updateError) {
+            console.warn('Failed to update last login:', updateError.message);
+            // Continue with login - this is not critical
         }
 
         // Generate JWT token
@@ -698,21 +724,25 @@ router.post('/login', async (req, res) => {
 
         const token = jwt.sign(tokenPayload, config.jwt.secret, { expiresIn: '24h' });
 
-        // Log successful login
-        await database.logAudit(
-            type,
-            user.id,
-            'login_successful',
-            'auth',
-            null,
-            null,
-            JSON.stringify({ 
-                email: normalizedEmail,
-                userType: type,
-                timestamp: new Date().toISOString()
-            }),
-            req.ip
-        );
+        // Log successful login with safe error handling
+        try {
+            await database.logAudit(
+                type,
+                user.id,
+                'login_successful',
+                'auth',
+                null,
+                null,
+                JSON.stringify({ 
+                    email: normalizedEmail,
+                    userType: type,
+                    timestamp: new Date().toISOString()
+                }),
+                clientIP
+            );
+        } catch (auditError) {
+            console.warn('Audit logging failed:', auditError.message);
+        }
 
         res.json({
             success: true,
@@ -739,20 +769,25 @@ router.post('/login', async (req, res) => {
     } catch (error) {
         console.error('Unified login error:', error);
         
-        // Log system error
-        await database.logAudit(
-            'system',
-            0,
-            'login_error',
-            'auth',
-            null,
-            null,
-            JSON.stringify({ 
-                error: error.message,
-                timestamp: new Date().toISOString()
-            }),
-            req.ip
-        ).catch(console.error);
+        // Log system error with safe error handling
+        try {
+            await database.logAudit(
+                'system',
+                0,
+                'login_error',
+                'auth',
+                null,
+                null,
+                JSON.stringify({ 
+                    error: error.message,
+                    stack: error.stack,
+                    timestamp: new Date().toISOString()
+                }),
+                clientIP
+            );
+        } catch (auditError) {
+            console.warn('Audit logging failed:', auditError.message);
+        }
 
         res.status(500).json({
             success: false,
