@@ -105,6 +105,7 @@ CREATE TABLE IF NOT EXISTS project_gallery (
     submitted_by INTEGER,
     approved_by INTEGER,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     approved_at DATETIME,
     FOREIGN KEY (submitted_by) REFERENCES admin_users(id),
     FOREIGN KEY (approved_by) REFERENCES admin_users(id)
@@ -191,6 +192,13 @@ CREATE TRIGGER IF NOT EXISTS update_project_timestamp
 AFTER UPDATE ON projects
 BEGIN
     UPDATE projects SET updated_at = CURRENT_TIMESTAMP WHERE id = new.id;
+END;
+
+-- Trigger to update gallery item updated_at timestamp
+CREATE TRIGGER IF NOT EXISTS update_gallery_timestamp 
+AFTER UPDATE ON project_gallery
+BEGIN
+    UPDATE project_gallery SET updated_at = CURRENT_TIMESTAMP WHERE id = new.id;
 END;
 
 -- Error logs table for application error tracking

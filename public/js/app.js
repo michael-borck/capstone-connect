@@ -1,3 +1,75 @@
+// Image processing utilities
+class ImageProcessor {
+    static async resizeImage(file, maxWidth, maxHeight, quality = 0.8) {
+        return new Promise((resolve) => {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const img = new Image();
+            
+            img.onload = () => {
+                // Calculate new dimensions
+                let { width, height } = img;
+                
+                if (width > height) {
+                    if (width > maxWidth) {
+                        height = (height * maxWidth) / width;
+                        width = maxWidth;
+                    }
+                } else {
+                    if (height > maxHeight) {
+                        width = (width * maxHeight) / height;
+                        height = maxHeight;
+                    }
+                }
+                
+                canvas.width = width;
+                canvas.height = height;
+                
+                // Draw resized image
+                ctx.drawImage(img, 0, 0, width, height);
+                
+                // Convert to base64
+                const dataURL = canvas.toDataURL('image/jpeg', quality);
+                resolve(dataURL);
+            };
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+    
+    static async processImageFile(file) {
+        if (!file || !file.type.startsWith('image/')) {
+            throw new Error('Please select a valid image file');
+        }
+        
+        // Check file size (limit to 10MB)
+        if (file.size > 10 * 1024 * 1024) {
+            throw new Error('Image file is too large. Please select a file smaller than 10MB.');
+        }
+        
+        try {
+            // Create thumbnail (150x150) - lower quality for smaller size
+            const thumbnail = await this.resizeImage(file, 150, 150, 0.6);
+            
+            // Create medium size (600x450) - smaller dimensions and lower quality
+            const medium = await this.resizeImage(file, 600, 450, 0.7);
+            
+            return {
+                thumbnail,
+                medium,
+                originalName: file.name,
+                size: file.size
+            };
+        } catch (error) {
+            throw new Error('Failed to process image: ' + error.message);
+        }
+    }
+}
+
 // Main application JavaScript
 class CapstoneApp {
     constructor() {
@@ -10,11 +82,124 @@ class CapstoneApp {
     }
 
     async init() {
+        console.log('🚀 App initializing...');
+        
+        // Show loading state on app container
+        const app = document.getElementById('app');
+        if (app) {
+            app.style.opacity = '0.5';
+        }
+        
         this.setupEventListeners();
+        
+        // Check auth FIRST before anything else
         await this.checkAuthStatus();
+        
+        // Load data and settings
         await this.loadInitialData();
         await this.loadBrandingSettings();
         await this.loadBusinessRules();
+        
+        // Restore previous section after auth and data loading
+        this.restorePreviousSection();
+        
+        // Show app once everything is ready
+        if (app) {
+            app.style.opacity = '1';
+        }
+        
+        console.log('✅ App initialization complete');
+    }
+
+    restorePreviousSection() {
+        const savedSection = localStorage.getItem('currentSection');
+        console.log('🔄 Restoring section:', savedSection);
+        console.log('🔍 Current user:', this.currentUser?.type);
+        console.log('🔍 Section exists in DOM:', !!document.getElementById(savedSection));
+        
+        // Only restore if section exists
+        if (savedSection && document.getElementById(savedSection)) {
+            // Check if user has permission for this section
+            const canAccess = this.canAccessSection(savedSection);
+            console.log('🔍 Can access section:', canAccess);
+            
+            if (canAccess) {
+                console.log('✅ Restoring to section:', savedSection);
+                this.showSection(savedSection);
+                
+                // If restoring to admin section, also restore the tab
+                if (savedSection === 'admin') {
+                    setTimeout(() => this.restoreAdminTab(), 100);
+                }
+                return;
+            } else {
+                console.log('❌ No permission for saved section:', savedSection);
+            }
+        } else {
+            console.log('❌ Saved section invalid:', { savedSection, domExists: !!document.getElementById(savedSection) });
+        }
+        
+        // Fallback to appropriate default section
+        if (this.currentUser) {
+            if (this.currentUser.type === 'admin') {
+                this.showSection('admin');
+                // Also restore admin tab if user was on admin section
+                setTimeout(() => this.restoreAdminTab(), 100);
+            } else if (this.currentUser.type === 'student') {
+                this.showSection('projects');
+            } else if (this.currentUser.type === 'client') {
+                this.showSection('clientDashboard');
+            } else {
+                this.showSection('home');
+            }
+        } else {
+            this.showSection('home');
+        }
+    }
+    
+    restoreAdminTab() {
+        const savedTab = localStorage.getItem('currentAdminTab');
+        console.log('🔄 Restoring admin tab:', savedTab);
+        
+        if (savedTab && this.currentUser && this.currentUser.type === 'admin') {
+            // Check if this tab actually exists in the DOM
+            const tabButton = document.querySelector(`.admin-tab[data-tab="${savedTab}"]`);
+            if (tabButton) {
+                console.log('✅ Restoring to admin tab:', savedTab);
+                this.showAdminTab(savedTab);
+            } else {
+                console.log('❌ Admin tab not found, defaulting to pending');
+                this.showAdminTab('pending');
+            }
+        } else {
+            console.log('📋 No saved admin tab, defaulting to pending');
+            this.showAdminTab('pending');
+        }
+    }
+    
+    canAccessSection(sectionId) {
+        // Public sections - anyone can access
+        const publicSections = ['home', 'projects', 'gallery', 'about', 'legal', 'login'];
+        if (publicSections.includes(sectionId)) {
+            return true;
+        }
+        
+        // Protected sections - require authentication
+        if (!this.currentUser) {
+            return false;
+        }
+        
+        // Check user-specific sections
+        switch (sectionId) {
+            case 'admin':
+                return this.currentUser.type === 'admin';
+            case 'studentDashboard':
+                return this.currentUser.type === 'student';
+            case 'clientDashboard':
+                return this.currentUser.type === 'client';
+            default:
+                return true; // Allow access to other sections for authenticated users
+        }
     }
 
     setupEventListeners() {
@@ -121,11 +306,26 @@ class CapstoneApp {
             
             const data = await response.json();
             this.galleryItems = data.gallery || [];
+            console.log('📸 Gallery loaded:', this.galleryItems.length, 'items');
             this.renderGallery(this.galleryItems);
             
         } catch (error) {
             console.error('Error loading gallery:', error);
             this.showError('galleryList', 'Failed to load gallery');
+        }
+    }
+    
+    // Force refresh gallery data and re-render if currently viewing gallery
+    async refreshGallery() {
+        console.log('🔄 Force refreshing gallery...');
+        await this.loadGallery();
+        
+        // If currently viewing gallery section, the data is already refreshed
+        // If not, data will be fresh when user navigates to gallery
+        if (this.currentSection === 'gallery') {
+            console.log('📸 Gallery section is active, data refreshed in place');
+        } else {
+            console.log('📸 Gallery data refreshed for next viewing');
         }
     }
 
@@ -230,19 +430,34 @@ class CapstoneApp {
             return;
         }
 
-        container.innerHTML = items.map(item => `
-            <div class="gallery-card" onclick="app.showGalleryDetails(${item.id})">
-                <div class="gallery-image">
-                    📷 Project Image
+        container.innerHTML = items.map(item => {
+            // Handle both old URL format and new base64 format
+            let imageHtml = '<div class="gallery-placeholder">📷</div>';
+            
+            if (item.image_urls) {
+                if (typeof item.image_urls === 'object' && item.image_urls.thumbnail) {
+                    // New format: base64 thumbnail
+                    imageHtml = `<img src="${item.image_urls.thumbnail}" alt="${this.escapeHtml(item.title)}" class="gallery-img">`;
+                } else if (Array.isArray(item.image_urls) && item.image_urls.length > 0) {
+                    // Old format: URL array
+                    imageHtml = `<img src="${item.image_urls[0]}" alt="${this.escapeHtml(item.title)}" class="gallery-img">`;
+                }
+            }
+            
+            return `
+                <div class="gallery-card" onclick="app.showGalleryDetails(${item.id})">
+                    <div class="gallery-image">
+                        ${imageHtml}
+                    </div>
+                    <div class="gallery-content">
+                        <h3 class="gallery-title">${this.escapeHtml(item.title)}</h3>
+                        <div class="gallery-year">${item.year} • ${this.escapeHtml(item.category)}</div>
+                        <p class="gallery-description">${this.escapeHtml(item.description)}</p>
+                        <div class="gallery-client">${this.escapeHtml(item.client_name)}</div>
+                    </div>
                 </div>
-                <div class="gallery-content">
-                    <h3 class="gallery-title">${this.escapeHtml(item.title)}</h3>
-                    <div class="gallery-year">${item.year} • ${this.escapeHtml(item.category)}</div>
-                    <p class="gallery-description">${this.escapeHtml(item.description)}</p>
-                    <div class="gallery-client">${this.escapeHtml(item.client_name)}</div>
-                </div>
-            </div>
-        `).join('');
+            `;
+        }).join('');
     }
 
     filterProjects() {
@@ -311,6 +526,16 @@ class CapstoneApp {
         if (targetSection) {
             targetSection.classList.add('active');
             this.currentSection = sectionId;
+            
+            // Store current section for refresh persistence
+            localStorage.setItem('currentSection', sectionId);
+            console.log('📍 Current section stored:', sectionId);
+            
+            // Clear admin tab storage when navigating away from admin
+            if (sectionId !== 'admin') {
+                localStorage.removeItem('currentAdminTab');
+                console.log('🧹 Cleared admin tab storage (navigated away from admin)');
+            }
         }
 
         // Load section-specific data if needed
@@ -320,6 +545,11 @@ class CapstoneApp {
             this.loadGallery();
         } else if (sectionId === 'studentDashboard') {
             this.loadStudentDashboard();
+        } else if (sectionId === 'admin') {
+            // Setup admin dashboard properly when navigating to it
+            console.log('🔧 Setting up admin dashboard tabs');
+            this.setupAdminTabs();
+            setTimeout(() => this.restoreAdminTab(), 50);
         }
     }
 
@@ -552,18 +782,50 @@ class CapstoneApp {
         const item = this.galleryItems.find(i => i.id === itemId);
         if (!item) return;
 
+        // Handle image display for modal
+        let imageHtml = '';
+        if (item.image_urls) {
+            if (typeof item.image_urls === 'object' && item.image_urls.medium) {
+                // New format: base64 medium size
+                imageHtml = `
+                    <div class="gallery-detail-image">
+                        <img src="${item.image_urls.medium}" alt="${this.escapeHtml(item.title)}" style="max-width: 100%; max-height: 400px; border-radius: 8px; margin-bottom: 1rem;">
+                    </div>
+                `;
+            } else if (Array.isArray(item.image_urls) && item.image_urls.length > 0) {
+                // Old format: URL array
+                imageHtml = `
+                    <div class="gallery-detail-image">
+                        <img src="${item.image_urls[0]}" alt="${this.escapeHtml(item.title)}" style="max-width: 100%; max-height: 400px; border-radius: 8px; margin-bottom: 1rem;">
+                    </div>
+                `;
+            }
+        }
+
         const modalBody = document.getElementById('modalBody');
         modalBody.innerHTML = `
             <h2>${this.escapeHtml(item.title)}</h2>
             <div style="margin-bottom: 1rem; color: var(--primary-color); font-weight: bold;">
                 ${item.year} • ${this.escapeHtml(item.category)}
             </div>
+            ${imageHtml}
             <div style="margin-bottom: 1rem;">
                 <strong>Client:</strong> ${this.escapeHtml(item.client_name)}
             </div>
+            ${item.team_members ? `
+                <div style="margin-bottom: 1rem;">
+                    <strong>Team Members:</strong> ${this.escapeHtml(item.team_members)}
+                </div>
+            ` : ''}
             <div style="margin-bottom: 2rem;">
                 <p style="line-height: 1.6;">${this.escapeHtml(item.description)}</p>
             </div>
+            ${item.outcomes ? `
+                <div style="margin-bottom: 1rem;">
+                    <strong>Outcomes & Impact:</strong>
+                    <p style="line-height: 1.6; margin-top: 0.5rem;">${this.escapeHtml(item.outcomes)}</p>
+                </div>
+            ` : ''}
         `;
 
         this.showModal();
@@ -1456,6 +1718,10 @@ class CapstoneApp {
     }
 
     showAdminTab(tabType) {
+        // Store current admin tab for refresh persistence
+        localStorage.setItem('currentAdminTab', tabType);
+        console.log('📋 Current admin tab stored:', tabType);
+        
         // Update tab buttons
         document.querySelectorAll('.admin-tab').forEach(tab => {
             tab.classList.remove('active');
@@ -4247,53 +4513,83 @@ class CapstoneApp {
     }
 
     async checkAuthStatus() {
-        console.log('checkAuthStatus called, authManager:', window.authManager);
+        console.log('🔐 checkAuthStatus called');
         
-        // Wait for authManager to be ready
+        // Wait for authManager to be ready with shorter intervals
         let retries = 0;
-        while (!window.authManager && retries < 50) {
-            console.log('AuthManager not ready, waiting...');
-            await new Promise(resolve => setTimeout(resolve, 100));
+        while (!window.authManager && retries < 100) {
+            console.log('⏳ AuthManager not ready, waiting...', retries);
+            await new Promise(resolve => setTimeout(resolve, 50));
             retries++;
         }
         
         if (!window.authManager) {
-            console.error('AuthManager failed to initialize');
+            console.error('❌ AuthManager failed to initialize after 5 seconds');
+            // Initialize a minimal auth state
+            this.currentUser = null;
+            this.updateUIForUnauthenticatedUser();
             return;
         }
         
+        console.log('🔍 Checking auth status:', {
+            hasToken: !!window.authManager.token,
+            hasUser: !!window.authManager.user,
+            isAuthenticated: window.authManager.isAuthenticated()
+        });
+        
         // Check with auth manager
-        if (window.authManager.isAuthenticated()) {
+        if (window.authManager.isAuthenticated() && window.authManager.user) {
             this.currentUser = window.authManager.user;
-            console.log('User authenticated:', this.currentUser);
+            console.log('✅ User authenticated:', {
+                type: this.currentUser.type,
+                name: this.currentUser.fullName,
+                email: this.currentUser.email
+            });
             this.updateUIForAuthenticatedUser();
         } else {
             this.currentUser = null;
-            console.log('User not authenticated');
+            console.log('❌ User not authenticated');
             this.updateUIForUnauthenticatedUser();
         }
     }
 
     updateUIForAuthenticatedUser() {
+        console.log('🔄 Updating UI for authenticated user:', this.currentUser?.fullName, this.currentUser?.type);
+        
         const userStatus = document.getElementById('userStatus');
         const authNavLink = document.getElementById('authNavLink');
-        const userInfo = document.getElementById('userInfo');
-        const logoutBtn = document.getElementById('logoutBtn');
         const studentDashboardLink = document.getElementById('studentDashboardLink');
         const clientDashboardLink = document.getElementById('clientDashboardLink');
         const adminDashboardLink = document.getElementById('adminDashboardLink');
 
-        if (userStatus && authNavLink && userInfo && this.currentUser) {
+        if (this.currentUser) {
             // Hide login link
-            authNavLink.style.display = 'none';
+            if (authNavLink) {
+                authNavLink.style.display = 'none';
+                console.log('🔒 Hidden login link');
+            }
             
-            // Show user status
-            userStatus.style.display = 'flex';
-            
-            // Update user info
-            const user = this.currentUser;
-            const displayName = user.fullName || user.organizationName || user.email;
-            userInfo.textContent = `${displayName} (${user.type})`;
+            // Show user status with proper logout button
+            if (userStatus) {
+                userStatus.style.display = 'flex';
+                const user = this.currentUser;
+                const displayName = user.fullName || user.organizationName || user.email;
+                
+                userStatus.innerHTML = `
+                    <span id="userInfo">${displayName} (${user.type})</span>
+                    <button id="logoutBtn" class="btn btn-outline" style="padding: 0.3rem 0.6rem; font-size: 0.8rem;">Logout</button>
+                `;
+                
+                // Setup logout button click handler
+                const logoutBtn = document.getElementById('logoutBtn');
+                if (logoutBtn) {
+                    logoutBtn.onclick = () => {
+                        console.log('🚪 Logout clicked');
+                        this.logout();
+                    };
+                }
+                console.log('👤 Updated user status with logout button');
+            }
             
             // Hide all dashboard links first
             if (studentDashboardLink) studentDashboardLink.style.display = 'none';
@@ -4301,21 +4597,25 @@ class CapstoneApp {
             if (adminDashboardLink) adminDashboardLink.style.display = 'none';
             
             // Show the appropriate dashboard link based on user type
+            const user = this.currentUser;
             if (user.type === 'student' && studentDashboardLink) {
                 studentDashboardLink.style.display = 'block';
+                console.log('📚 Showed student dashboard link');
             } else if (user.type === 'client' && clientDashboardLink) {
                 clientDashboardLink.style.display = 'block';
+                console.log('🏢 Showed client dashboard link');
             } else if (user.type === 'admin' && adminDashboardLink) {
                 adminDashboardLink.style.display = 'block';
-            }
-            
-            // Setup logout button
-            if (logoutBtn) {
-                logoutBtn.onclick = () => this.logout();
+                console.log('⚙️ Showed admin dashboard link');
             }
             
             // Auto-redirect to appropriate dashboard based on user type
-            if (this.currentSection === 'login' || this.currentSection === 'home') {
+            // But skip if we just restored to a non-login/home section
+            const savedSection = localStorage.getItem('currentSection');
+            const shouldAutoRedirect = (this.currentSection === 'login' || this.currentSection === 'home') && 
+                                     (!savedSection || savedSection === 'login' || savedSection === 'home');
+            
+            if (shouldAutoRedirect) {
                 if (user.type === 'admin') {
                     this.showAdminDashboard();
                 } else if (user.type === 'client') {
@@ -4732,8 +5032,20 @@ class CapstoneApp {
                     <textarea id="editOutcomes" rows="3">${this.escapeHtml(item.outcomes || '')}</textarea>
                 </div>
                 <div class="form-group">
-                    <label for="editImageUrl">Image URL</label>
-                    <input type="url" id="editImageUrl" value="${this.escapeHtml(item.image_urls && item.image_urls[0] || '')}">
+                    <label for="editImageFile">Upload New Image</label>
+                    <input type="file" id="editImageFile" accept="image/*" class="file-input">
+                    <div class="file-upload-info">
+                        <small>Supported formats: JPG, PNG, WebP (max 10MB)</small>
+                        ${item.image_urls && item.image_urls.thumbnail ? `
+                            <div class="current-image">
+                                <p>Current image:</p>
+                                <img src="${item.image_urls.thumbnail}" alt="Current image" style="max-width: 100px; max-height: 100px; border-radius: 4px;">
+                            </div>
+                        ` : ''}
+                    </div>
+                    <div id="imagePreview" class="image-preview" style="display: none;">
+                        <img id="previewImg" alt="Image preview" style="max-width: 200px; max-height: 200px; border-radius: 4px;">
+                    </div>
                 </div>
                 <div class="form-actions">
                     <button type="submit" class="btn btn-primary">Save Changes</button>
@@ -4743,6 +5055,25 @@ class CapstoneApp {
         `;
         
         const form = document.getElementById('editGalleryForm');
+        const fileInput = document.getElementById('editImageFile');
+        const imagePreview = document.getElementById('imagePreview');
+        const previewImg = document.getElementById('previewImg');
+        
+        // File input change handler for preview
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file && file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    previewImg.src = e.target.result;
+                    imagePreview.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            } else {
+                imagePreview.style.display = 'none';
+            }
+        });
+        
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             await this.updateGalleryItem(item.id);
@@ -4753,6 +5084,19 @@ class CapstoneApp {
 
     async updateGalleryItem(itemId) {
         try {
+            // Prevent double submission
+            if (this.isUpdatingGallery) {
+                console.log('⚠️ Gallery update already in progress, skipping...');
+                return;
+            }
+            this.isUpdatingGallery = true;
+            
+            // Show loading state
+            const submitBtn = document.querySelector('#editGalleryForm button[type="submit"]');
+            const originalText = submitBtn.textContent;
+            submitBtn.textContent = 'Processing...';
+            submitBtn.disabled = true;
+            
             const updateData = {
                 title: document.getElementById('editTitle').value,
                 description: document.getElementById('editDescription').value,
@@ -4760,9 +5104,29 @@ class CapstoneApp {
                 category: document.getElementById('editCategory').value,
                 clientName: document.getElementById('editClientName').value,
                 teamMembers: document.getElementById('editTeamMembers').value,
-                outcomes: document.getElementById('editOutcomes').value,
-                imageUrls: document.getElementById('editImageUrl').value ? [document.getElementById('editImageUrl').value] : []
+                outcomes: document.getElementById('editOutcomes').value
             };
+            
+            // Process image file if uploaded
+            const fileInput = document.getElementById('editImageFile');
+            if (fileInput.files && fileInput.files[0]) {
+                try {
+                    submitBtn.textContent = 'Processing Image...';
+                    const processedImages = await ImageProcessor.processImageFile(fileInput.files[0]);
+                    updateData.imageUrls = {
+                        thumbnail: processedImages.thumbnail,
+                        medium: processedImages.medium,
+                        originalName: processedImages.originalName
+                    };
+                    
+                    // Log payload size
+                    const payloadSize = JSON.stringify(updateData).length;
+                    console.log('📏 Update payload size:', (payloadSize / 1024).toFixed(1), 'KB');
+                    
+                } catch (imageError) {
+                    throw new Error('Image processing failed: ' + imageError.message);
+                }
+            }
             
             const response = await fetch(`/api/gallery/admin/${itemId}`, {
                 method: 'PUT',
@@ -4782,14 +5146,22 @@ class CapstoneApp {
             // Refresh gallery management
             await this.loadGalleryManagement();
             
-            // Also refresh public gallery if it's currently visible
-            if (this.currentSection === 'gallery') {
-                await this.loadGallery();
-            }
+            // Force refresh public gallery
+            await this.refreshGallery();
             
         } catch (error) {
             console.error('Error updating gallery item:', error);
-            this.showErrorToast('Error', 'Failed to update gallery item');
+            this.showErrorToast('Error', error.message || 'Failed to update gallery item');
+            
+            // Restore button state
+            const submitBtn = document.querySelector('#editGalleryForm button[type="submit"]');
+            if (submitBtn) {
+                submitBtn.textContent = 'Save Changes';
+                submitBtn.disabled = false;
+            }
+        } finally {
+            // Always reset the flag
+            this.isUpdatingGallery = false;
         }
     }
     
@@ -4997,10 +5369,24 @@ class CapstoneApp {
                 }
                 
                 if (galleryItems.length > 0) {
-                    itemsContainer.innerHTML = galleryItems.map(item => `
+                    itemsContainer.innerHTML = galleryItems.map(item => {
+                        // Handle both old URL format and new base64 format for admin view
+                        let imageHtml = '📷 No Image';
+                        
+                        if (item.image_urls) {
+                            if (typeof item.image_urls === 'object' && item.image_urls.thumbnail) {
+                                // New format: base64 thumbnail
+                                imageHtml = `<img src="${item.image_urls.thumbnail}" alt="${this.escapeHtml(item.title)}" class="gallery-img">`;
+                            } else if (Array.isArray(item.image_urls) && item.image_urls.length > 0) {
+                                // Old format: URL array
+                                imageHtml = `<img src="${item.image_urls[0]}" alt="${this.escapeHtml(item.title)}" class="gallery-img">`;
+                            }
+                        }
+                        
+                        return `
                         <div class="gallery-card admin-gallery-card">
                             <div class="gallery-image">
-                                ${item.image_urls && item.image_urls.length > 0 ? `<img src="${item.image_urls[0]}" alt="${this.escapeHtml(item.title)}">` : '📷 No Image'}
+                                ${imageHtml}
                             </div>
                             <div class="gallery-content">
                                 <h3 class="gallery-title">${this.escapeHtml(item.title)}</h3>
@@ -5028,7 +5414,8 @@ class CapstoneApp {
                                 </div>
                             </div>
                         </div>
-                    `).join('');
+                        `;
+                    }).join('');
                 } else {
                     itemsContainer.innerHTML = '<div class="admin-empty"><h4>No gallery items found</h4><p>Gallery items will appear here once projects are completed and added to the gallery.</p></div>';
                 }

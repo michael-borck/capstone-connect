@@ -72,12 +72,16 @@ app.use(helmet({
 // Rate limiting
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // Limit each IP to 100 requests per windowMs
+    max: 500, // Increased for development - allow more requests for image uploads
     message: {
         error: 'Too many requests from this IP, please try again later.'
     },
     standardHeaders: true,
     legacyHeaders: false,
+    // Skip rate limiting for gallery uploads in development
+    skip: (req) => {
+        return req.path.includes('/api/gallery/admin/') && req.method === 'PUT';
+    }
 });
 
 const authLimiter = rateLimit({

@@ -9,8 +9,9 @@ class AuthManager {
     }
 
     init() {
-        this.setupFormHandlers();
+        // Check auth IMMEDIATELY (synchronously) to restore state before UI renders
         this.checkExistingAuth();
+        this.setupFormHandlers();
     }
 
     setupFormHandlers() {
@@ -365,25 +366,66 @@ class AuthManager {
         const token = localStorage.getItem('auth_token');
         const userInfo = localStorage.getItem('user_info');
         
+        console.log('🔍 checkExistingAuth:', { 
+            hasToken: !!token, 
+            hasUserInfo: !!userInfo,
+            tokenLength: token?.length || 0
+        });
+        
         if (token && userInfo) {
             try {
                 this.token = token;
                 this.user = JSON.parse(userInfo);
                 
-                // Update app state
-                if (window.capstoneApp && typeof window.capstoneApp.updateUIForAuthenticatedUser === 'function') {
-                    window.capstoneApp.currentUser = this.user;
-                    window.capstoneApp.updateUIForAuthenticatedUser();
-                } else if (window.capstoneApp) {
-                    window.capstoneApp.currentUser = this.user;
-                }
+                console.log('✅ Found existing auth:', { 
+                    hasToken: !!this.token, 
+                    userType: this.user?.type,
+                    userName: this.user?.fullName 
+                });
                 
                 // Verify token is still valid
                 this.verifyToken();
             } catch (error) {
-                console.error('Error parsing stored user info:', error);
+                console.error('❌ Error parsing stored user info:', error);
                 this.clearAuth();
             }
+        } else if (token && !userInfo) {
+            console.log('⚠️ Token found but user info missing - attempting recovery');
+            this.token = token;
+            // Try to get user info from server using the token
+            this.recoverUserInfo();
+        } else {
+            console.log('❌ No existing auth found');
+        }
+    }
+    
+    async recoverUserInfo() {
+        console.log('🔄 Attempting to recover user info from server...');
+        try {
+            const response = await fetch('/api/auth/profile', {
+                headers: {
+                    'Authorization': `Bearer ${this.token}`
+                }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                this.user = data.user;
+                localStorage.setItem('user_info', JSON.stringify(this.user));
+                console.log('✅ User info recovered:', this.user.fullName);
+                
+                // Force UI update after recovery
+                if (window.app && window.app.updateUIForAuthenticatedUser) {
+                    window.app.currentUser = this.user;
+                    window.app.updateUIForAuthenticatedUser();
+                }
+            } else {
+                console.log('❌ Token invalid, clearing auth');
+                this.clearAuth();
+            }
+        } catch (error) {
+            console.error('❌ Failed to recover user info:', error);
+            this.clearAuth();
         }
     }
 

@@ -205,7 +205,7 @@ const seedData = {
             clientName: 'Curtin University',
             teamMembers: 'Alice Cooper, Bob Taylor, Charlie Davis',
             outcomes: 'Successfully deployed to 5000+ students, 40% reduction in late arrivals to classes',
-            imageUrls: '[]'
+            imageUrls: null
         },
         {
             title: 'Predictive Maintenance System',
@@ -215,7 +215,7 @@ const seedData = {
             clientName: 'Industrial Solutions Ltd',
             teamMembers: 'Diana Wilson, Ethan Moore, Fiona Clark',
             outcomes: '30% reduction in unplanned downtime, $200K annual savings',
-            imageUrls: '[]'
+            imageUrls: null
         },
         {
             title: 'Blockchain Supply Chain Tracker',
@@ -225,7 +225,7 @@ const seedData = {
             clientName: 'FreshFood Co',
             teamMembers: 'George Martinez, Helen Lee, Ian Rodriguez',
             outcomes: 'Improved traceability by 95%, enhanced consumer trust',
-            imageUrls: '[]'
+            imageUrls: null
         },
         {
             title: 'Virtual Reality Training Simulator',
@@ -235,7 +235,7 @@ const seedData = {
             clientName: 'SafeMining Corp',
             teamMembers: 'Jack Thompson, Kate Anderson, Liam Wright',
             outcomes: '50% improvement in safety test scores, reduced training time by 30%',
-            imageUrls: '[]'
+            imageUrls: null
         }
     ]
 };
