@@ -3936,6 +3936,38 @@ class CapstoneApp {
                             <div class="color-preview" style="background: ${setting_value}"></div>
                         </div>
                     `;
+                } else if (setting_key === 'site_logo_url') {
+                    const logoPreview = setting_value ? 
+                        `<div class="logo-preview">
+                            <img src="${setting_value}" alt="Current logo" class="logo-preview-img">
+                            <button type="button" class="btn btn-sm btn-outline" onclick="window.capstoneApp.removeLogo()">Remove Logo</button>
+                        </div>` : 
+                        '<div class="logo-preview" style="display: none;"></div>';
+                    
+                    inputHtml = `
+                        <div class="logo-upload-wrapper">
+                            <input type="file" 
+                                   class="setting-input logo-file-input" 
+                                   id="${setting_key}_file" 
+                                   accept="image/*"
+                                   style="display: none;"
+                                   onchange="window.capstoneApp.handleLogoUpload(event)">
+                            <button type="button" 
+                                    class="btn btn-outline" 
+                                    onclick="document.getElementById('${setting_key}_file').click()">
+                                Choose Logo Image
+                            </button>
+                            <div class="file-upload-info">
+                                <small>Recommended: PNG/SVG format, max 2MB, 200x60px optimal</small>
+                            </div>
+                            ${logoPreview}
+                            <input type="hidden" 
+                                   class="setting-input" 
+                                   id="${setting_key}" 
+                                   value="${this.escapeHtml(setting_value)}"
+                                   data-type="${setting_type}">
+                        </div>
+                    `;
                 } else {
                     inputHtml = `
                         <input type="text" 
@@ -4171,6 +4203,73 @@ class CapstoneApp {
         `).join('');
     }
     
+    async handleLogoUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        try {
+            // Validate file type
+            if (!file.type.startsWith('image/')) {
+                throw new Error('Please select a valid image file');
+            }
+            
+            // Validate file size (max 2MB)
+            if (file.size > 2 * 1024 * 1024) {
+                throw new Error('Logo file is too large. Please select a file smaller than 2MB.');
+            }
+            
+            // Process the image - resize to appropriate logo size
+            const logoImage = await ImageProcessor.resizeImage(file, 200, 60, 0.9);
+            
+            // Update the hidden input and preview
+            const hiddenInput = document.getElementById('site_logo_url');
+            hiddenInput.value = logoImage;
+            
+            // Update the preview
+            this.updateLogoPreview(logoImage);
+            
+            // Check for changes
+            this.checkForChanges();
+            
+            this.showSuccessToast('Logo Uploaded', 'Logo has been uploaded successfully. Save settings to apply changes.');
+            
+        } catch (error) {
+            console.error('Logo upload error:', error);
+            this.showErrorToast('Upload Failed', error.message);
+            // Reset the file input
+            event.target.value = '';
+        }
+    }
+    
+    updateLogoPreview(logoDataUrl) {
+        const wrapper = document.querySelector('.logo-upload-wrapper');
+        const preview = wrapper.querySelector('.logo-preview');
+        
+        preview.innerHTML = `
+            <img src="${logoDataUrl}" alt="Current logo" class="logo-preview-img">
+            <button type="button" class="btn btn-sm btn-outline" onclick="window.capstoneApp.removeLogo()">Remove Logo</button>
+        `;
+        preview.style.display = 'block';
+    }
+    
+    removeLogo() {
+        const hiddenInput = document.getElementById('site_logo_url');
+        hiddenInput.value = '';
+        
+        const wrapper = document.querySelector('.logo-upload-wrapper');
+        const preview = wrapper.querySelector('.logo-preview');
+        preview.style.display = 'none';
+        preview.innerHTML = '';
+        
+        // Reset file input
+        const fileInput = wrapper.querySelector('.logo-file-input');
+        fileInput.value = '';
+        
+        this.checkForChanges();
+        
+        this.showInfoToast('Logo Removed', 'Logo has been removed. Save settings to apply changes.');
+    }
+    
     async saveSettings() {
         const updates = [];
         
@@ -4218,7 +4317,7 @@ class CapstoneApp {
             this.checkForChanges();
             
             // If branding was updated, refresh the page to apply changes
-            if (updates.some(u => ['site_title', 'primary_color', 'secondary_color'].includes(u.key))) {
+            if (updates.some(u => ['site_title', 'primary_color', 'secondary_color', 'site_logo_url'].includes(u.key))) {
                 setTimeout(() => location.reload(), 1000);
             }
             
@@ -4420,6 +4519,20 @@ class CapstoneApp {
                 const footerElement = document.querySelector('.footer-content p:first-child');
                 if (footerElement) {
                     footerElement.textContent = settings.footer_text;
+                }
+            }
+            
+            // Apply logo if provided
+            if (settings.site_logo_url) {
+                const logoImg = document.getElementById('headerLogo');
+                if (logoImg) {
+                    logoImg.src = settings.site_logo_url;
+                    logoImg.style.display = 'block';
+                }
+            } else {
+                const logoImg = document.getElementById('headerLogo');
+                if (logoImg) {
+                    logoImg.style.display = 'none';
                 }
             }
             

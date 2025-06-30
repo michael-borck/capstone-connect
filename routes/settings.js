@@ -10,7 +10,8 @@ router.get('/branding', async (req, res) => {
             'site_tagline', 
             'footer_text',
             'primary_color',
-            'secondary_color'
+            'secondary_color',
+            'site_logo_url'
         ];
         
         const settings = {};
