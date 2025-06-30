@@ -195,49 +195,8 @@ const seedData = {
         }
     ],
 
-    // Sample gallery projects (past successful projects)
-    galleryProjects: [
-        {
-            title: 'Smart Campus Navigation App',
-            description: 'An AR-enabled mobile app that helps students navigate the Curtin campus with real-time directions, building information, and event notifications.',
-            year: 2023,
-            category: 'Mobile Development',
-            clientName: 'Curtin University',
-            teamMembers: 'Alice Cooper, Bob Taylor, Charlie Davis',
-            outcomes: 'Successfully deployed to 5000+ students, 40% reduction in late arrivals to classes',
-            imageUrls: null
-        },
-        {
-            title: 'Predictive Maintenance System',
-            description: 'IoT-based system for predicting equipment failures in manufacturing plants using machine learning algorithms.',
-            year: 2023,
-            category: 'IoT & Machine Learning',
-            clientName: 'Industrial Solutions Ltd',
-            teamMembers: 'Diana Wilson, Ethan Moore, Fiona Clark',
-            outcomes: '30% reduction in unplanned downtime, $200K annual savings',
-            imageUrls: null
-        },
-        {
-            title: 'Blockchain Supply Chain Tracker',
-            description: 'Transparent supply chain tracking system using blockchain technology for food safety and authenticity verification.',
-            year: 2022,
-            category: 'Blockchain',
-            clientName: 'FreshFood Co',
-            teamMembers: 'George Martinez, Helen Lee, Ian Rodriguez',
-            outcomes: 'Improved traceability by 95%, enhanced consumer trust',
-            imageUrls: null
-        },
-        {
-            title: 'Virtual Reality Training Simulator',
-            description: 'VR training simulator for mining safety procedures with realistic hazard scenarios and performance tracking.',
-            year: 2022,
-            category: 'Virtual Reality',
-            clientName: 'SafeMining Corp',
-            teamMembers: 'Jack Thompson, Kate Anderson, Liam Wright',
-            outcomes: '50% improvement in safety test scores, reduced training time by 30%',
-            imageUrls: null
-        }
-    ]
+    // Sample gallery projects (past successful projects) - loaded from extracted data
+    galleryProjects: require('./gallery-seed-data')
 };
 
 // Hash password function
@@ -559,6 +518,12 @@ module.exports = {
 // Run seeding if this file is executed directly
 if (require.main === module) {
     seedDatabase().then(() => {
+        console.log('Database seeding completed successfully!');
+        
+        // Add post-seed branding (logo)
+        const { addPostSeedBranding } = require('../add-post-seed-branding');
+        return addPostSeedBranding();
+    }).then(() => {
         console.log('Seeding finished. You can now start the application.');
         process.exit(0);
     }).catch((error) => {
