@@ -64,9 +64,10 @@ class SettingsManager {
             // Branding
             site_title: 'Curtin Capstone Connect',
             site_tagline: 'Connecting Students with Real-World Projects',
-            primary_color: '#e31837',
-            secondary_color: '#1a1a1a',
+            primary_color: '#B8860B',
+            secondary_color: '#2C2C2C',
             footer_text: '© 2025 Curtin University. All rights reserved.',
+            site_logo_url: '',
             
             // Auth
             student_domain_whitelist: ['@student.curtin.edu.au', '@postgrad.curtin.edu.au'],

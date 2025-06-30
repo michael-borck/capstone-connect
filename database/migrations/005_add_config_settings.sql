@@ -25,9 +25,10 @@ INSERT INTO config_settings (setting_key, setting_value, setting_type, category,
 -- Branding Settings
 ('site_title', 'Curtin Capstone Connect', 'string', 'branding', 'Main title displayed across the application'),
 ('site_tagline', 'Connecting Students with Real-World Projects', 'string', 'branding', 'Tagline shown on homepage'),
-('primary_color', '#1a73e8', 'string', 'branding', 'Primary color for buttons and headers (hex format)'),
-('secondary_color', '#fbbc04', 'string', 'branding', 'Secondary accent color (hex format)'),
+('primary_color', '#B8860B', 'string', 'branding', 'Primary color for buttons and headers (hex format)'),
+('secondary_color', '#2C2C2C', 'string', 'branding', 'Secondary accent color (hex format)'),
 ('footer_text', '© 2025 Curtin University. All rights reserved.', 'string', 'branding', 'Footer copyright text'),
+('site_logo_url', '', 'string', 'branding', 'Site logo image (base64 encoded or URL)'),
 
 -- Authentication Settings
 ('student_domain_whitelist', '["@student.curtin.edu.au", "@postgrad.curtin.edu.au"]', 'json', 'auth', 'Allowed email domains for student registration'),
@@ -61,5 +62,5 @@ INSERT INTO config_settings (setting_key, setting_value, setting_type, category,
 -- Create audit log entry for migration
 INSERT INTO audit_log (user_type, action, entity_type, entity_id, new_value, created_at)
 VALUES ('system', 'migration_005_config_settings', 'database', 0, 
-        '{"migration": "005_add_config_settings.sql", "tables": ["config_settings"], "records_created": 25}',
+        '{"migration": "005_add_config_settings.sql", "tables": ["config_settings"], "records_created": 26}',
         CURRENT_TIMESTAMP);
