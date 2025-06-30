@@ -515,14 +515,26 @@ module.exports = {
     hashPassword
 };
 
+// Add logo to branding settings (post-seed)
+async function addCurtinLogo() {
+    const curtinLogo = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjYwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0MDAgMTIwIj4KICA8IS0tIEdvbGQgYmFja2dyb3VuZCAtLT4KICA8cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjEyMCIgZmlsbD0iI0I4ODYwQiIvPgogIAogIDwhLS0gU2hpZWxkIG91dGxpbmUgaW4gd2hpdGUgLS0+CiAgPGcgZmlsbD0id2hpdGUiIHRyYW5zZm9ybT0idHJhbnNsYXRlKDUwLCAxMCkiPgogICAgPCEtLSBNYWluIHNoaWVsZCBzaGFwZSAtLT4KICAgIDxwYXRoIGQ9Ik0xNTAgMjAgTDE1MCA3MCBRMTUwIDg1IDEzNSA5MCBMMTUwIDEwMCBMMTY1IDkwIFExNTAgODUgMTUwIDcwIFoiIGZpbGw9IndoaXRlIi8+CiAgICAKICAgIDwhLS0gSGV4YWdvbiBpbiBjZW50ZXIgLS0+CiAgICA8cG9seWdvbiBwb2ludHM9IjEyMCwzMCAxMzAsMjUgMTQwLDI1IDE1MCwzMCAxNDAsMzUgMTMwLDM1IiBmaWxsPSIjQjg4NjBCIi8+CiAgICAKICAgIDwhLS0gSG9yaXpvbnRhbCBsaW5lcyAobGVmdCBzaWRlKSAtLT4KICAgIDxyZWN0IHg9IjcwIiB5PSIyNSIgd2lkdGg9IjQwIiBoZWlnaHQ9IjQiLz4KICAgIDxyZWN0IHg9IjcwIiB5PSIzNSIgd2lkdGg9IjQwIiBoZWlnaHQ9IjQiLz4KICAgIDxyZWN0IHg9IjcwIiB5PSI0NSIgd2lkdGg9IjQwIiBoZWlnaHQ9IjQiLz4KICAgIDxyZWN0IHg9IjcwIiB5PSI1NSIgd2lkdGg9IjQwIiBoZWlnaHQ9IjQiLz4KICAgIDxyZWN0IHg9IjcwIiB5PSI2NSIgd2lkdGg9IjM1IiBoZWlnaHQ9IjQiLz4KICAgIDxyZWN0IHg9IjcwIiB5PSI3NSIgd2lkdGg9IjMwIiBoZWlnaHQ9IjQiLz4KICAgIDxyZWN0IHg9IjcwIiB5PSI4NSIgd2lkdGg9IjI1IiBoZWlnaHQ9IjQiLz4KICAgIAogICAgPCEtLSBIb3Jpem9udGFsIGxpbmVzIChyaWdodCBzaWRlKSAtLT4KICAgIDxyZWN0IHg9IjE5MCIgeT0iMjUiIHdpZHRoPSI0MCIgaGVpZ2h0PSI0Ii8+CiAgICA8cmVjdCB4PSIxOTAiIHk9IjM1IiB3aWR0aD0iNDAiIGhlaWdodD0iNCIvPgogICAgPHJlY3QgeD0iMTkwIiB5PSI0NSIgd2lkdGg9IjQwIiBoZWlnaHQ9IjQiLz4KICAgIDxyZWN0IHg9IjE5MCIgeT0iNTUiIHdpZHRoPSI0MCIgaGVpZ2h0PSI0Ii8+CiAgICA8cmVjdCB4PSIxOTUiIHk9IjY1IiB3aWR0aD0iMzUiIGhlaWdodD0iNCIvPgogICAgPHJlY3QgeD0iMjAwIiB5PSI3NSIgd2lkdGg9IjMwIiBoZWlnaHQ9IjQiLz4KICAgIDxyZWN0IHg9IjIwNSIgeT0iODUiIHdpZHRoPSIyNSIgaGVpZ2h0PSI0Ii8+CiAgPC9nPgogIAogIDwhLS0gVW5pdmVyc2l0eSB0ZXh0IC0tPgogIDx0ZXh0IHg9IjIwMCIgeT0iMTA1IiBmb250LWZhbWlseT0iQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTQiIGZvbnQtd2VpZ2h0PSJib2xkIiBmaWxsPSJ3aGl0ZSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+Q1VSVElOIFVOSVZFUlNJVFk8L3RleHQ+Cjwvc3ZnPg==';
+    
+    try {
+        console.log('Adding Curtin logo to branding settings...');
+        await database.updateSetting('site_logo_url', curtinLogo, 1);
+        console.log('✓ Curtin logo added successfully!');
+    } catch (error) {
+        console.error('Warning: Could not add Curtin logo:', error.message);
+    }
+}
+
 // Run seeding if this file is executed directly
 if (require.main === module) {
     seedDatabase().then(() => {
         console.log('Database seeding completed successfully!');
         
-        // Add post-seed branding (logo)
-        const { addPostSeedBranding } = require('../add-post-seed-branding');
-        return addPostSeedBranding();
+        // Add Curtin logo to branding
+        return addCurtinLogo();
     }).then(() => {
         console.log('Seeding finished. You can now start the application.');
         process.exit(0);
